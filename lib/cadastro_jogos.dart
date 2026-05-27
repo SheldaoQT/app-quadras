@@ -1,8 +1,11 @@
 import 'package:app_quadras/esporte.dart';
 import 'package:app_quadras/horario_funcionamento.dart';
+import 'package:app_quadras/login_store.dart';
 import 'package:app_quadras/quadra.dart';
+import 'package:app_quadras/usuario.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CadastroJogos extends StatefulWidget {
@@ -175,6 +178,22 @@ class _CadastroJogosState extends State<CadastroJogos> {
     final hora = timeOfDay.hour.toString().padLeft(2, '0');
     final minuto = timeOfDay.minute.toString().padLeft(2, '0');
     return '$hora:$minuto';
+  }
+
+  void salvarJogo(Usuario usuarioLogado) async {
+    final supabase = Supabase.instance.client;
+    try {
+      await supabase.from('jogo').insert({
+        'quadra_id': idQuadraSelecionada,
+        'esporte_id': idEsporteSelecionado,
+        'data': DateFormat('yyyy-MM-dd').format(dataJogo),
+        'hora_inicio': obterStringTimeOfDay(horarioInicioJogo!),
+        'hora_fim': obterStringTimeOfDay(horarioFimJogo!),
+        'host': usuarioLogado.id,
+      });
+    } catch (e) {
+      debugPrint('exception: $e');
+    }
   }
 
   @override
@@ -404,7 +423,7 @@ class _CadastroJogosState extends State<CadastroJogos> {
                               final horarioFuncionamentoDataJogo = horariosFuncionamento.firstWhere(
                                 (hf) => hf.descricao == obterDescricaoDiaSemana(dataJogo),
                               );
-                              if (selectedEndTime.hour <= horarioFuncionamentoDataJogo.horarioFim) {
+                              if (selectedEndTime.hour >= horarioFuncionamentoDataJogo.horarioInicio) {
                                 setState(() {
                                   horarioFimJogo = selectedEndTime;
                                   horarioFimController.text = obterStringTimeOfDay(horarioFimJogo!);
@@ -431,7 +450,7 @@ class _CadastroJogosState extends State<CadastroJogos> {
                               }
                             }
                           },
-                          child: Text('Selecionar horário início'),
+                          child: Text('Selecionar horário fim'),
                         ),
                       if (etapa >= 4)
                         TextFormField(
@@ -441,6 +460,20 @@ class _CadastroJogosState extends State<CadastroJogos> {
                           ),
                           controller: horarioFimController,
                         ),
+                      if (etapa >= 5)
+                        ElevatedButton(
+                          onPressed: () {
+                            salvarJogo(context.read<LoginStore>().usuario!);
+                          },
+                          child: Text('Salvar jogo'),
+                        ),
+                      // if (etapa >= 5)
+                      //   ElevatedButton(
+                      //     onPressed: () {
+                      //       salvarJogo();
+                      //     },
+                      //     child: Text('Salvar jogo'),
+                      //   ),
                     ],
                   ),
                 ),

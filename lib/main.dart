@@ -1,7 +1,9 @@
 import 'package:app_quadras/cadastro_usuario.dart';
 import 'package:app_quadras/login.dart';
+import 'package:app_quadras/login_store.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
@@ -12,7 +14,18 @@ void main() async {
     anonKey: "sb_publishable_ox2qFgPXRV9sktnc0-8Oag_s814sEe-",
   );
 
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (context) {
+            return LoginStore();
+          },
+        ),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {

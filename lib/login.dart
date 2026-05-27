@@ -1,8 +1,11 @@
 import 'package:app_quadras/cadastro_usuario.dart';
+import 'package:app_quadras/login_store.dart';
 import 'package:app_quadras/principal.dart';
 import 'package:app_quadras/principal_adm.dart';
+import 'package:app_quadras/usuario.dart';
 import 'package:app_quadras/utils.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class TelaLogin extends StatefulWidget {
@@ -90,6 +93,15 @@ class _TelaLoginState extends State<TelaLogin> {
                           ),
                         );
                       } else {
+                        context.read<LoginStore>().setUsuario(
+                          Usuario(
+                            id: usuarios.first["id"],
+                            nomeCompleto: usuarios.first["nome_completo"],
+                            login: usuarios.first["login"],
+                            senha: usuarios.first["senha"],
+                            isAdm: usuarios.first["is_adm"],
+                          ),
+                        );
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text("Usuário autenticado com sucesso"),
