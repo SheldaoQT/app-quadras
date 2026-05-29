@@ -1,7 +1,9 @@
 import 'package:app_quadras/esporte.dart';
+import 'package:app_quadras/esporte_store.dart';
 import 'package:app_quadras/horario_funcionamento.dart';
 import 'package:app_quadras/login_store.dart';
 import 'package:app_quadras/quadra.dart';
+import 'package:app_quadras/quadra_store.dart';
 import 'package:app_quadras/usuario.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -45,95 +47,17 @@ class _CadastroJogosState extends State<CadastroJogos> {
   void initState() {
     // TODO: implement initState
     super.initState();
-    consultarEsportes().then(
+    context.read<QuadraStore>().buscarQuadras().then(
       (value) {
-        consultarEsportesHabilitadosPorQuadra().then(
+        consultarHorariosFuncionamento().then(
           (value) {
-            consultarQuadras().then(
-              (value) {
-                consultarHorariosFuncionamento().then(
-                  (value) {
-                    setState(() {
-                      isLoading = false;
-                    });
-                  },
-                );
-              },
-            );
+            setState(() {
+              isLoading = false;
+            });
           },
         );
       },
     );
-  }
-
-  Future<void> consultarEsportes() async {
-    final supabase = Supabase.instance.client;
-    final esportesJson = await supabase.from('esporte').select();
-    esportes.clear();
-    setState(() {
-      esportes = esportesJson.map(
-        (json) {
-          return Esporte(
-            id: json['id'],
-            descricao: json['descricao'],
-            numeroJogadores: json['numero_jogadores'],
-          );
-        },
-      ).toList();
-      debugPrint('esportes length: ${esportes.length}');
-    });
-  }
-
-  Future<void> consultarEsportesHabilitadosPorQuadra() async {
-    final supabase = Supabase.instance.client;
-    final esportesHabilitadosPorQuadraJson = await supabase.from('quadra_esporte').select();
-    esportesHabilitadosPorQuadra.clear();
-    for (var i = 0; i < esportesHabilitadosPorQuadraJson.length; i++) {
-      final idQuadraAtual = esportesHabilitadosPorQuadraJson[i]['quadra_id'];
-      if (esportesHabilitadosPorQuadra.containsKey(idQuadraAtual)) {
-        (esportesHabilitadosPorQuadra[idQuadraAtual] as List<int>).add(esportesHabilitadosPorQuadraJson[i]['esporte_id']);
-      } else {
-        esportesHabilitadosPorQuadra[idQuadraAtual] = List<int>.from([esportesHabilitadosPorQuadraJson[i]['esporte_id']]);
-      }
-    }
-    debugPrint('esportes habilitados por quadra length: ${esportesHabilitadosPorQuadra.length}');
-  }
-
-  Future<void> consultarQuadras() async {
-    final supabase = Supabase.instance.client;
-    final quadrasJson = await supabase.from('quadra').select();
-    quadras.clear();
-    debugPrint('[consultarQuadras] esportes habilitados por quadra: $esportesHabilitadosPorQuadra');
-    setState(() {
-      quadras = quadrasJson.map(
-        (json) {
-          final esportesHabilitados = <Esporte>[];
-          debugPrint('[consultarQuadras] json: $json');
-
-          // final idsEsportesHabilitados = [];
-          // if (esportesHabilitadosPorQuadra.containsKey(json['id'])) {
-          //   esportesHabilitados.add(esportes.firstWhere((element) => element.id == idsEsportesHabilitados[json['id']]));
-          // }
-          if (esportesHabilitadosPorQuadra.containsKey(json['id'])) {
-            List<int> idsEsportesHabilitados = esportesHabilitadosPorQuadra[json['id']] as List<int>;
-            for (var i = 0; i < idsEsportesHabilitados.length; i++) {
-              final esporte = esportes.firstWhere((element) => element.id == idsEsportesHabilitados[i]);
-              esportesHabilitados.add(esporte);
-            }
-          }
-
-          return Quadra(id: json['id'], descricao: json['descricao'], esportesHabilitados: esportesHabilitados);
-        },
-      ).toList();
-      quadras.removeWhere((element) => element.esportesHabilitados.isEmpty);
-      idEsporteSelecionado = quadras.first.esportesHabilitados.first.id;
-    });
-    debugPrint('quadras length: ${quadras.length}');
-    if (quadras.isNotEmpty) {
-      setState(() {
-        idQuadraSelecionada = quadras.first.id;
-      });
-    }
   }
 
   Future<void> consultarHorariosFuncionamento() async {

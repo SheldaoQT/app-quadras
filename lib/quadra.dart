@@ -1,12 +1,12 @@
 import 'package:app_quadras/esporte.dart';
 
 class Quadra {
-  final int id;
+  final int? id;
   final String descricao;
   final List<Esporte> esportesHabilitados;
 
   Quadra({
-    required this.id,
+    this.id,
     required this.descricao,
     required this.esportesHabilitados,
   });

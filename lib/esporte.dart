@@ -1,13 +1,21 @@
 class Esporte {
-  final int id;
+  final int? id;
   final String descricao;
   final int numeroJogadores;
 
   Esporte({
-    required this.id,
+    this.id,
     required this.descricao,
     required this.numeroJogadores,
   });
+
+  factory Esporte.fromSupabase(Map<String, dynamic> map) {
+    return Esporte(
+      id: map['id'],
+      descricao: map['descricao'],
+      numeroJogadores: map['numero_jogadores'],
+    );
+  }
 
   @override
   String toString() {

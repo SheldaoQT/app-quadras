@@ -1,6 +1,10 @@
 import 'package:app_quadras/cadastro_usuario.dart';
+import 'package:app_quadras/esporte_store.dart';
+import 'package:app_quadras/jogo_repository.dart';
 import 'package:app_quadras/login.dart';
 import 'package:app_quadras/login_store.dart';
+import 'package:app_quadras/quadra_repository.dart';
+import 'package:app_quadras/quadra_store.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -14,12 +18,31 @@ void main() async {
     anonKey: "sb_publishable_ox2qFgPXRV9sktnc0-8Oag_s814sEe-",
   );
 
+  // final repository = QuadraRepository();
+  // final quadras = await repository.buscarQuadras();
+  // for (var quadra in quadras) {
+  //   debugPrint('quadra: ${quadra.descricao} - qtde esportes habilitados: ${quadra.esportesHabilitados.length}');
+  // }
+
+  final repository = JogoRepository();
+  await repository.buscarJogos();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
           create: (context) {
             return LoginStore();
+          },
+        ),
+        ChangeNotifierProvider(
+          create: (context) {
+            return EsporteStore();
+          },
+        ),
+        ChangeNotifierProvider(
+          create: (context) {
+            return QuadraStore();
           },
         ),
       ],

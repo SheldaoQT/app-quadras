@@ -1,8 +1,10 @@
 import 'package:app_quadras/esporte.dart';
+import 'package:app_quadras/esporte_store.dart';
 import 'package:app_quadras/jogo.dart';
 import 'package:app_quadras/login_store.dart';
 import 'package:app_quadras/pesquisa_jogos.dart';
 import 'package:app_quadras/quadra.dart';
+import 'package:app_quadras/quadra_store.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -25,32 +27,13 @@ class _TelaPrincipalState extends State<TelaPrincipal> {
   void initState() {
     // TODO: implement initState
     super.initState();
-    consultarEsportes().then((value) {
-      consultarEsportesHabilitadosPorQuadra().then((value) {
-        consultarQuadras().then((value) {
-          consultarJogos().then(
-            (value) {},
-          );
-        });
+    final store = context.read<QuadraStore>();
+    context.read<EsporteStore>().buscarEsportes().then((value) {
+      store.buscarQuadras().then((value) {
+        consultarJogos().then(
+          (value) {},
+        );
       });
-    });
-  }
-
-  Future<void> consultarEsportes() async {
-    final supabase = Supabase.instance.client;
-    final esportesJson = await supabase.from('esporte').select();
-    esportes.clear();
-    setState(() {
-      esportes = esportesJson.map(
-        (json) {
-          return Esporte(
-            id: json['id'],
-            descricao: json['descricao'],
-            numeroJogadores: json['numero_jogadores'],
-          );
-        },
-      ).toList();
-      debugPrint('esportes length: ${esportes.length}');
     });
   }
 
@@ -67,37 +50,6 @@ class _TelaPrincipalState extends State<TelaPrincipal> {
       }
     }
     debugPrint('esportes habilitados por quadra length: ${esportesHabilitadosPorQuadra.length}');
-  }
-
-  Future<void> consultarQuadras() async {
-    final supabase = Supabase.instance.client;
-    final quadrasJson = await supabase.from('quadra').select();
-    quadras.clear();
-    debugPrint('[consultarQuadras] esportes habilitados por quadra: $esportesHabilitadosPorQuadra');
-    setState(() {
-      quadras = quadrasJson.map(
-        (json) {
-          final esportesHabilitados = <Esporte>[];
-          debugPrint('[consultarQuadras] json: $json');
-
-          // final idsEsportesHabilitados = [];
-          // if (esportesHabilitadosPorQuadra.containsKey(json['id'])) {
-          //   esportesHabilitados.add(esportes.firstWhere((element) => element.id == idsEsportesHabilitados[json['id']]));
-          // }
-          if (esportesHabilitadosPorQuadra.containsKey(json['id'])) {
-            List<int> idsEsportesHabilitados = esportesHabilitadosPorQuadra[json['id']] as List<int>;
-            for (var i = 0; i < idsEsportesHabilitados.length; i++) {
-              final esporte = esportes.firstWhere((element) => element.id == idsEsportesHabilitados[i]);
-              esportesHabilitados.add(esporte);
-            }
-          }
-
-          return Quadra(id: json['id'], descricao: json['descricao'], esportesHabilitados: esportesHabilitados);
-        },
-      ).toList();
-      quadras.removeWhere((element) => element.esportesHabilitados.isEmpty);
-    });
-    debugPrint('quadras length: ${quadras.length}');
   }
 
   Future<void> consultarJogos() async {

@@ -1,4 +1,7 @@
+import 'package:app_quadras/esporte.dart';
+import 'package:app_quadras/esporte_store.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CadastroEsporte extends StatefulWidget {
@@ -61,11 +64,17 @@ class _CadastroEsporteState extends State<CadastroEsporte> {
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
                   try {
-                    final supabase = Supabase.instance.client;
-                    await supabase.from('esporte').insert({
-                      'descricao': descricaoController.text,
-                      'numero_jogadores': numeroJogadoresController.text,
-                    });
+                    // final supabase = Supabase.instance.client;
+                    // await supabase.from('esporte').insert({
+                    //   'descricao': descricaoController.text,
+                    //   'numero_jogadores': numeroJogadoresController.text,
+                    // });
+                    context.read<EsporteStore>().cadastrarEsporte(
+                      Esporte(
+                        descricao: descricaoController.text,
+                        numeroJogadores: int.parse(numeroJogadoresController.text),
+                      ),
+                    );
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text("Cadastro realizado com sucesso!"),

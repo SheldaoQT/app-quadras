@@ -147,7 +147,7 @@ class _CadastroQuadraState extends State<CadastroQuadra> {
                             await supabase //
                                 .from("quadra")
                                 .update({"descricao": descricaoController.text})
-                                .eq("id", widget.quadra!.id);
+                                .eq("id", widget.quadra!.id!);
                           }
                           List<Map<String, dynamic>> registros =
                               await supabase //
@@ -173,7 +173,7 @@ class _CadastroQuadraState extends State<CadastroQuadra> {
                                     .from("quadra_esporte")
                                     .delete()
                                     .eq("quadra_id", idQuadra)
-                                    .eq("esporte_id", element.key.id);
+                                    .eq("esporte_id", element.key.id!);
                               }
                             }
                           }

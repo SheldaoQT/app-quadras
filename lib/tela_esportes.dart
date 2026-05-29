@@ -1,6 +1,8 @@
 import 'package:app_quadras/cadastro_esporte.dart';
 import 'package:app_quadras/esporte.dart';
+import 'package:app_quadras/esporte_store.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class TelaEsportes extends StatefulWidget {
@@ -11,40 +13,16 @@ class TelaEsportes extends StatefulWidget {
 }
 
 class _TelaEsportesState extends State<TelaEsportes> {
-  List<Esporte> esportes = [];
-
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
-    consultarEsportes();
-  }
-
-  void consultarEsportes() async {
-    final supabase = Supabase.instance.client;
-    final esportesSupabase = await supabase
-        .from("esporte") //
-        .select();
-    print("esportes: $esportesSupabase");
-    setState(() {
-      esportes = esportesSupabase.map(
-        (e) {
-          print("id: $e");
-          print("${e["id"]}");
-          print("${e["descricao"]}");
-          print("${e["numero_jogadores"]}");
-          return Esporte(
-            id: e["id"],
-            descricao: e["descricao"],
-            numeroJogadores: e["numero_jogadores"],
-          );
-        },
-      ).toList();
-    });
+    context.read<EsporteStore>().buscarEsportes();
   }
 
   @override
   Widget build(BuildContext context) {
+    final esporteStore = context.read<EsporteStore>();
     return Scaffold(
       appBar: AppBar(
         title: Text("Tela Esportes"),
@@ -54,18 +32,27 @@ class _TelaEsportesState extends State<TelaEsportes> {
           constraints: BoxConstraints(
             maxWidth: 500,
           ),
-          child: ListView.builder(
-            itemCount: esportes.length,
-            itemBuilder: (context, index) {
-              final Esporte esporteCorrente = esportes[index];
-              return Card(
-                elevation: 8.0,
-                child: ListTile(
-                  leading: Icon(Icons.sports_basketball),
-                  title: Text(esporteCorrente.descricao),
-                  subtitle: Text("Nº de jogadores: ${esporteCorrente.numeroJogadores}"),
-                  trailing: Text(index.toString()),
-                ),
+          child: ListenableBuilder(
+            listenable: esporteStore,
+            builder: (context, child) {
+              if (esporteStore.isLoading) {
+                return CircularProgressIndicator.adaptive();
+              }
+
+              return ListView.builder(
+                itemCount: esporteStore.esportes.length,
+                itemBuilder: (context, index) {
+                  final Esporte esporteCorrente = esporteStore.esportes[index];
+                  return Card(
+                    elevation: 8.0,
+                    child: ListTile(
+                      leading: Icon(Icons.sports_basketball),
+                      title: Text(esporteCorrente.descricao),
+                      subtitle: Text("Nº de jogadores: ${esporteCorrente.numeroJogadores}"),
+                      trailing: Text(index.toString()),
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -86,7 +73,7 @@ class _TelaEsportesState extends State<TelaEsportes> {
                   if (value != null) {
                     print("value: $value");
                   }
-                  consultarEsportes();
+                  esporteStore.buscarEsportes();
                 },
               );
         },
