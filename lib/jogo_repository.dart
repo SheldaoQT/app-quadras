@@ -49,7 +49,7 @@ class JogoRepository {
 
     final jogos = <Jogo>[];
     for (var element in registrosJogo) {
-      jogos.add(Jogo(id: element['id'], quadra: quadras.firstWhere((e) => e.id == element['quadra_id']), esporte: esportes.fi, data: data, horarioInicio: horarioInicio, horarioFim: horarioFim, host: host))
+      // jogos.add(Jogo(id: element['id'], quadra: quadras.firstWhere((e) => e.id == element['quadra_id']), esporte: esportes.fi, data: data, horarioInicio: horarioInicio, horarioFim: horarioFim, host: host))
     }
   }
 }
