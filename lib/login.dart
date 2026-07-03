@@ -1,11 +1,7 @@
-import 'package:app_quadras/cadastro_cliente.dart';
-import 'package:app_quadras/home_cliente.dart';
-import 'package:app_quadras/home_funcionario.dart';
-import 'package:app_quadras/login_store.dart';
-import 'package:app_quadras/usuario.dart';
-import 'package:app_quadras/utils.dart';
+import 'package:app_barba/cadastro_cliente.dart';
+import 'package:app_barba/home_cliente.dart';
+import 'package:app_barba/home_funcionario.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class TelaLogin extends StatefulWidget {
@@ -22,7 +18,7 @@ class _TelaLoginState extends State<TelaLogin> {
 
   final formKey = GlobalKey<FormState>();
 
-  final loginController = TextEditingController();
+  final emailController = TextEditingController();
 
   final senhaController = TextEditingController();
 
@@ -34,91 +30,49 @@ class _TelaLoginState extends State<TelaLogin> {
     try {
       final supabase = Supabase.instance.client;
 
-      final usuarios = await supabase
-          .from(
-            'usuario',
-          )
-          .select()
-          .eq(
-            'login',
-            loginController.text,
-          )
-          .eq(
-            'senha',
-            Utils.gerarMd5(
-              senhaController.text,
-            ),
-          );
+      final resposta = await supabase.auth.signInWithPassword(
+        email: emailController.text.trim(),
+        password: senhaController.text,
+      );
 
-      if (usuarios.isEmpty) {
-        if (!mounted) {
-          return;
-        }
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Credenciais inválidas',
-            ),
-
-            backgroundColor: Colors.red,
-          ),
-        );
-
-        return;
+      if (resposta.user == null) {
+        throw Exception('Usuário inválido');
       }
 
-      final usuario = Usuario(
-        id: usuarios.first['id'],
+      final dados = await supabase.from('usuarios').select().eq('id', resposta.user!.id).single();
 
-        nomeCompleto: usuarios.first['nome_completo'],
+      // ===== DEBUG =====
+      print('---------------------------');
+      print('ID: ${resposta.user!.id}');
+      print('Nome: ${dados['nome']}');
+      print('Perfil: ${dados['perfil']}');
+      print('---------------------------');
 
-        login: usuarios.first['login'],
+      final perfil = dados['perfil'];
 
-        senha: usuarios.first['senha'],
+      final isFuncionario = perfil == 'funcionario' || perfil == 'admin';
 
-        isAdm: usuarios.first['is_adm'],
-      );
-
-      context.read<LoginStore>().setUsuario(
-        usuario,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Login realizado',
-          ),
-
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (!mounted) return;
 
       Navigator.pushReplacement(
         context,
-
         MaterialPageRoute(
-          builder: (_) => usuario.isAdm ? const HomeFuncionario() : const HomeCliente(),
+          builder: (_) => isFuncionario ? const HomeFuncionario() : const HomeCliente(),
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: Colors.red,
           content: Text(
-            'Erro: $e',
+            e.toString(),
           ),
         ),
       );
+
+      print(e);
     }
   }
 
@@ -132,124 +86,88 @@ class _TelaLoginState extends State<TelaLogin> {
           constraints: const BoxConstraints(
             maxWidth: 350,
           ),
-
           child: Padding(
             padding: const EdgeInsets.all(
               20,
             ),
-
             child: Form(
               key: formKey,
-
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-
                 children: [
                   const Text(
                     'Barbearia',
                     style: TextStyle(
                       fontSize: 30,
-
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(
                     height: 30,
                   ),
-
                   TextFormField(
-                    controller: loginController,
-
+                    controller: emailController,
                     decoration: const InputDecoration(
-                      labelText: 'Login',
-
+                      labelText: 'E-mail',
                       border: OutlineInputBorder(),
                     ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Campo obrigatório';
+                      }
 
-                    validator:
-                        (
-                          value,
-                        ) {
-                          if (value == null || value.isEmpty) {
-                            return 'Campo obrigatório';
-                          }
-
-                          return null;
-                        },
+                      return null;
+                    },
                   ),
-
                   const SizedBox(
                     height: 16,
                   ),
-
                   TextFormField(
                     controller: senhaController,
-
                     obscureText: obscureText,
-
                     decoration: InputDecoration(
                       labelText: 'Senha',
-
                       border: const OutlineInputBorder(),
-
                       suffixIcon: IconButton(
                         onPressed: () {
-                          setState(
-                            () {
-                              obscureText = !obscureText;
-                            },
-                          );
+                          setState(() {
+                            obscureText = !obscureText;
+                          });
                         },
-
                         icon: Icon(
                           obscureText ? Icons.visibility : Icons.visibility_off,
                         ),
                       ),
                     ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Campo obrigatório';
+                      }
 
-                    validator:
-                        (
-                          value,
-                        ) {
-                          if (value == null || value.isEmpty) {
-                            return 'Campo obrigatório';
-                          }
-
-                          return null;
-                        },
+                      return null;
+                    },
                   ),
-
                   const SizedBox(
                     height: 20,
                   ),
-
                   SizedBox(
                     width: double.infinity,
-
                     child: ElevatedButton(
                       onPressed: autenticar,
-
                       child: const Text(
                         'Entrar',
                       ),
                     ),
                   ),
-
                   TextButton(
                     onPressed: () {
                       Navigator.push(
                         context,
-
                         MaterialPageRoute(
-                          builder:
-                              (
-                                context,
-                              ) => const CadastroCliente(),
+                          builder: (_) => const CadastroCliente(),
                         ),
                       );
                     },
-
                     child: const Text(
                       'Criar conta',
                     ),

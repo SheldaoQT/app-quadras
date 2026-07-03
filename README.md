@@ -1,4 +1,4 @@
-# app_quadras
+# app_barba
 
 A new Flutter project.
 

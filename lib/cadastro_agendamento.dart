@@ -1,118 +1,76 @@
-import 'package:app_quadras/servico.dart';
-import 'package:app_quadras/horario_trabalho.dart';
-import 'package:app_quadras/login_store.dart';
-import 'package:app_quadras/profissional.dart';
-import 'package:app_quadras/profissional_store.dart';
-import 'package:app_quadras/usuario.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CadastroAgendamento extends StatefulWidget {
-  const CadastroAgendamento({super.key});
+  const CadastroAgendamento({
+    super.key,
+  });
 
   @override
   State<CadastroAgendamento> createState() => _CadastroAgendamentoState();
 }
 
 class _CadastroAgendamentoState extends State<CadastroAgendamento> {
-  bool isLoading = true;
+  bool carregando = true;
 
-  List<Profissional> profissionais = [];
-  List<HorarioTrabalho> horariosTrabalho = [];
+  List<dynamic> servicos = [];
+  List<dynamic> funcionarios = [];
 
-  dynamic idProfissionalSelecionado;
-
-  String? idServicoSelecionado;
-
-  int etapa = 0;
-
-  DateTime dataAgendamento = DateTime.now();
-
-  final dataController = TextEditingController();
-
-  final horarioInicioController = TextEditingController();
-
-  final horarioFimController = TextEditingController();
-
-  TimeOfDay? horarioInicio;
-
-  TimeOfDay? horarioFim;
+  int? servicoSelecionado;
+  String? funcionarioSelecionado;
+  DateTime? dataSelecionada;
 
   @override
   void initState() {
     super.initState();
+
     carregarDados();
   }
 
-  @override
-  void dispose() {
-    dataController.dispose();
-    horarioInicioController.dispose();
-    horarioFimController.dispose();
-    super.dispose();
-  }
-
   Future<void> carregarDados() async {
-    await context.read<ProfissionalStore>().buscarProfissionais();
-
-    await consultarHorarios();
+    await buscarServicos();
+    await buscarfuncionarios();
 
     if (!mounted) return;
 
     setState(() {
-      profissionais = context.read<ProfissionalStore>().profissionais;
-
-      isLoading = false;
+      carregando = false;
     });
   }
 
-  Future<void> consultarHorarios() async {
-    final supabase = Supabase.instance.client;
-
-    final resposta = await supabase
+  Future<void> buscarServicos() async {
+    final resposta = await Supabase.instance.client
         .from(
-          'horario_trabalho',
+          'servicos',
         )
         .select();
 
-    horariosTrabalho = resposta.map<HorarioTrabalho>((json) {
-      return HorarioTrabalho(
-        descricao: json['descricao'],
-        horarioInicio: json['horario_inicio'],
-        horarioFim: json['horario_fim'],
-      );
-    }).toList();
+    servicos = resposta;
   }
 
-  String formatarHorario(
-    TimeOfDay horario,
-  ) {
-    return '${horario.hour.toString().padLeft(2, '0')}:${horario.minute.toString().padLeft(2, '0')}';
+  Future<void> buscarfuncionarios() async {
+    final resposta = await Supabase.instance.client
+        .from(
+          'usuarios',
+        )
+        .select()
+        .eq(
+          'perfil',
+          'funcionario',
+        );
+
+    funcionarios = resposta;
   }
 
-  bool horarioValido() {
-    if (horarioInicio == null || horarioFim == null) {
-      return false;
-    }
-
-    final inicio = horarioInicio!.hour * 60 + horarioInicio!.minute;
-
-    final fim = horarioFim!.hour * 60 + horarioFim!.minute;
-
-    return fim > inicio;
-  }
-
-  Future<void> salvarAgendamento(
-    Usuario usuario,
-  ) async {
-    if (!horarioValido()) {
+  Future<void> salvar() async {
+    if (servicoSelecionado == null || funcionarioSelecionado == null || dataSelecionada == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Horário inválido',
+            'Preencha todos os campos',
           ),
+          backgroundColor: Colors.orange,
         ),
       );
 
@@ -120,22 +78,22 @@ class _CadastroAgendamentoState extends State<CadastroAgendamento> {
     }
 
     try {
-      final supabase = Supabase.instance.client;
+      final usuario = Supabase.instance.client.auth.currentUser;
 
-      await supabase.from('agendamento').insert({
+      if (usuario == null) {
+        return;
+      }
+
+      await Supabase.instance.client
+          .from(
+        'agendamentos',
+      )
+          .insert({
         'cliente_id': usuario.id,
-        'profissional_id': idProfissionalSelecionado,
-        'servico_id': idServicoSelecionado,
-        'data': DateFormat(
-          'yyyy-MM-dd',
-        ).format(dataAgendamento),
-        'hora_inicio': formatarHorario(
-          horarioInicio!,
-        ),
-        'hora_fim': formatarHorario(
-          horarioFim!,
-        ),
-        'status': 'agendado',
+        'servico_id': servicoSelecionado,
+        'barbeiro_id': funcionarioSelecionado,
+        'data_hora': dataSelecionada!.toIso8601String(),
+        'status': 'pendente',
       });
 
       if (!mounted) return;
@@ -145,12 +103,22 @@ class _CadastroAgendamentoState extends State<CadastroAgendamento> {
           content: Text(
             'Agendamento realizado',
           ),
+          backgroundColor: Colors.green,
         ),
       );
 
       Navigator.pop(context);
-    } catch (e) {
-      debugPrint(e.toString());
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Erro ao salvar',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -161,186 +129,128 @@ class _CadastroAgendamentoState extends State<CadastroAgendamento> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Cadastro de agendamento',
+          'Novo Agendamento',
         ),
       ),
-      body: isLoading
+      body: carregando
           ? const Center(
               child: CircularProgressIndicator(),
             )
-          : SingleChildScrollView(
+          : Padding(
               padding: const EdgeInsets.all(
                 16,
               ),
               child: Column(
                 children: [
-                  DropdownButtonFormField(
-                    initialValue: idProfissionalSelecionado,
+                  DropdownButtonFormField<int>(
                     decoration: const InputDecoration(
-                      labelText: 'Profissional',
+                      labelText: 'Serviço',
+                      border: OutlineInputBorder(),
                     ),
-                    items: profissionais.map(
-                      (p) {
-                        return DropdownMenuItem(
-                          value: p.id,
-                          child: Text(
-                            p.descricao,
+                    items: servicos
+                        .map<DropdownMenuItem<int>>(
+                          (s) => DropdownMenuItem<int>(
+                            value: s['id'] as int,
+                            child: Text(
+                              s['nome'],
+                            ),
                           ),
-                        );
-                      },
-                    ).toList(),
+                        )
+                        .toList(),
                     onChanged: (value) {
                       setState(() {
-                        idProfissionalSelecionado = value;
-
-                        etapa = 1;
+                        servicoSelecionado = value;
                       });
                     },
                   ),
-
-                  const SizedBox(
-                    height: 12,
-                  ),
-
-                  if (etapa >= 1)
-                    DropdownButtonFormField(
-                      initialValue: idServicoSelecionado,
-                      decoration: const InputDecoration(
-                        labelText: 'Serviço',
-                      ),
-                      items: profissionais
-                          .firstWhere(
-                            (e) => e.id == idProfissionalSelecionado,
-                          )
-                          .servicosHabilitados
-                          .map(
-                            (
-                              Servico s,
-                            ) {
-                              return DropdownMenuItem(
-                                value: s.id,
-                                child: Text(
-                                  s.nome,
-                                ),
-                              );
-                            },
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          idServicoSelecionado = value;
-
-                          etapa = 2;
-                        });
-                      },
-                    ),
-
-                  const SizedBox(
-                    height: 12,
-                  ),
-
-                  if (etapa >= 2)
-                    ElevatedButton(
-                      onPressed: () async {
-                        final data = await showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now(),
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime(
-                            2100,
-                          ),
-                        );
-
-                        if (data != null) {
-                          setState(() {
-                            dataAgendamento = data;
-
-                            dataController.text = DateFormat(
-                              'dd/MM/yyyy',
-                            ).format(data);
-
-                            etapa = 3;
-                          });
-                        }
-                      },
-                      child: const Text(
-                        'Selecionar data',
-                      ),
-                    ),
-
-                  TextField(
-                    controller: dataController,
-                    readOnly: true,
-                  ),
-
-                  const SizedBox(
-                    height: 12,
-                  ),
-
-                  ElevatedButton(
-                    onPressed: () async {
-                      horarioInicio = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-
-                      if (horarioInicio != null) {
-                        horarioInicioController.text = formatarHorario(horarioInicio!);
-
-                        setState(() {
-                          etapa = 4;
-                        });
-                      }
-                    },
-                    child: const Text(
-                      'Horário início',
-                    ),
-                  ),
-
-                  TextField(
-                    controller: horarioInicioController,
-                  ),
-
-                  const SizedBox(
-                    height: 12,
-                  ),
-
-                  ElevatedButton(
-                    onPressed: () async {
-                      horarioFim = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-
-                      if (horarioFim != null) {
-                        horarioFimController.text = formatarHorario(horarioFim!);
-
-                        setState(() {
-                          etapa = 5;
-                        });
-                      }
-                    },
-                    child: const Text(
-                      'Horário fim',
-                    ),
-                  ),
-
-                  TextField(
-                    controller: horarioFimController,
-                  ),
-
                   const SizedBox(
                     height: 20,
                   ),
-
+                  DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(
+                      labelText: 'funcionario',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: funcionarios
+                        .map<DropdownMenuItem<String>>(
+                          (b) => DropdownMenuItem<String>(
+                            value: b['id'],
+                            child: Text(
+                              b['nome'],
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        funcionarioSelecionado = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(
+                    height: 20,
+                  ),
                   ElevatedButton(
-                    onPressed: () {
-                      salvarAgendamento(
-                        context.read<LoginStore>().usuario!,
+                    onPressed: () async {
+                      final data = await showDatePicker(
+                        context: context,
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime(
+                          2100,
+                        ),
+                        initialDate: DateTime.now(),
                       );
+
+                      if (data == null) {
+                        return;
+                      }
+
+                      if (!context.mounted) {
+                        return;
+                      }
+
+                      final hora = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+
+                      if (hora == null) {
+                        return;
+                      }
+
+                      setState(() {
+                        dataSelecionada = DateTime(
+                          data.year,
+                          data.month,
+                          data.day,
+                          hora.hour,
+                          hora.minute,
+                        );
+                      });
                     },
                     child: const Text(
-                      'Salvar',
+                      'Selecionar Data e Hora',
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 20,
+                  ),
+                  if (dataSelecionada != null)
+                    Text(
+                      DateFormat(
+                        'dd/MM/yyyy HH:mm',
+                      ).format(
+                        dataSelecionada!,
+                      ),
+                    ),
+                  const Spacer(),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: salvar,
+                      child: const Text(
+                        'Confirmar',
+                      ),
                     ),
                   ),
                 ],

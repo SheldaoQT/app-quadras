@@ -1,4 +1,3 @@
-import 'package:app_quadras/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -16,7 +15,7 @@ class _CadastroClienteState extends State<CadastroCliente> {
 
   final nomeController = TextEditingController();
 
-  final loginController = TextEditingController();
+  final emailController = TextEditingController();
 
   final senhaController = TextEditingController();
 
@@ -24,19 +23,11 @@ class _CadastroClienteState extends State<CadastroCliente> {
     String? value,
   ) {
     if (value == null || value.isEmpty) {
-      return 'Campo obrigatório!';
+      return 'Campo obrigatório';
     }
 
-    final regex = RegExp(
-      r'^(?=.*[a-z])'
-      r'(?=.*[A-Z])'
-      r'(?=.*\d)'
-      r'(?=.*[@$!%*?&\-_#])'
-      r'[A-Za-z\d@$!%*?&\-_#]{12,}$',
-    );
-
-    if (!regex.hasMatch(value)) {
-      return 'A senha precisa ter no mínimo 12 caracteres';
+    if (value.length < 6) {
+      return 'Mínimo 6 caracteres';
     }
 
     return null;
@@ -45,17 +36,26 @@ class _CadastroClienteState extends State<CadastroCliente> {
   Future<void> cadastrar() async {
     final supabase = Supabase.instance.client;
 
+    final auth = await supabase.auth.signUp(
+      email: emailController.text.trim(),
+      password: senhaController.text,
+    );
+
+    if (auth.user == null) {
+      throw Exception(
+        'Falha ao criar usuário',
+      );
+    }
+
     await supabase
         .from(
-          'cliente',
-        )
+      'usuarios',
+    )
         .insert({
-          'nome': nomeController.text,
-          'login': loginController.text,
-          'senha': Utils.gerarMd5(
-            senhaController.text,
-          ),
-        });
+      'id': auth.user!.id,
+      'nome': nomeController.text,
+      'perfil': 'cliente',
+    });
   }
 
   @override
@@ -68,34 +68,26 @@ class _CadastroClienteState extends State<CadastroCliente> {
           'Cadastro de cliente',
         ),
       ),
-
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(
             maxWidth: 700,
           ),
-
           child: Padding(
             padding: const EdgeInsets.all(
               16,
             ),
-
             child: Form(
               key: formKey,
-
               child: Column(
                 spacing: 16,
-
                 children: [
                   TextFormField(
                     controller: nomeController,
-
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-
                       labelText: 'Nome',
                     ),
-
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Campo obrigatório!';
@@ -104,16 +96,12 @@ class _CadastroClienteState extends State<CadastroCliente> {
                       return null;
                     },
                   ),
-
                   TextFormField(
-                    controller: loginController,
-
+                    controller: emailController,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-
-                      labelText: 'Login',
+                      labelText: 'E-mail',
                     ),
-
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Campo obrigatório!';
@@ -122,19 +110,13 @@ class _CadastroClienteState extends State<CadastroCliente> {
                       return null;
                     },
                   ),
-
                   TextFormField(
                     controller: senhaController,
-
                     obscureText: obscureText,
-
                     validator: validarSenha,
-
                     decoration: InputDecoration(
                       border: const OutlineInputBorder(),
-
                       labelText: 'Senha',
-
                       suffixIcon: IconButton(
                         onPressed: () {
                           setState(
@@ -143,14 +125,12 @@ class _CadastroClienteState extends State<CadastroCliente> {
                             },
                           );
                         },
-
                         icon: Icon(
                           obscureText ? Icons.visibility : Icons.visibility_off,
                         ),
                       ),
                     ),
                   ),
-
                   ElevatedButton(
                     onPressed: () async {
                       if (!formKey.currentState!.validate()) {
@@ -163,7 +143,7 @@ class _CadastroClienteState extends State<CadastroCliente> {
                         if (!context.mounted) {
                           return;
                         }
-
+                        if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
@@ -180,7 +160,7 @@ class _CadastroClienteState extends State<CadastroCliente> {
                         if (!context.mounted) {
                           return;
                         }
-
+                        if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
@@ -193,7 +173,7 @@ class _CadastroClienteState extends State<CadastroCliente> {
                         if (!context.mounted) {
                           return;
                         }
-
+                        if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
@@ -204,7 +184,6 @@ class _CadastroClienteState extends State<CadastroCliente> {
                         );
                       }
                     },
-
                     child: const Text(
                       'Cadastrar',
                     ),

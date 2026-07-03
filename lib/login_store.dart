@@ -1,12 +1,14 @@
-import 'package:app_quadras/usuario.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LoginStore extends ChangeNotifier {
-  Usuario? _usuario;
+  User? get usuario => Supabase.instance.client.auth.currentUser;
 
-  Usuario? get usuario => _usuario;
+  bool get logado => usuario != null;
 
-  void setUsuario(Usuario pUsuario) {
-    _usuario = pUsuario;
+  Future<void> sair() async {
+    await Supabase.instance.client.auth.signOut();
+
+    notifyListeners();
   }
 }

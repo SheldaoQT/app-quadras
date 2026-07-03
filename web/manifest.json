@@ -1,6 +1,6 @@
 {
-    "name": "app_quadras",
-    "short_name": "app_quadras",
+    "name": "app_barba",
+    "short_name": "app_barba",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

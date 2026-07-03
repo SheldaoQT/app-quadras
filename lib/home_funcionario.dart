@@ -1,18 +1,29 @@
-import 'package:app_barba/tela_horarios.dart';
-import 'package:app_barba/tela_profissionais.dart';
-import 'package:app_barba/tela_servicos.dart';
-import 'package:flutter/material.dart';
+import 'package:app_barba/tela_servico.dart';
+import 'package:app_barba/meus_agendamentos.dart';
 
-class HomeFuncionario extends StatefulWidget {
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class HomeFuncionario extends StatelessWidget {
   const HomeFuncionario({
     super.key,
   });
 
-  @override
-  State<HomeFuncionario> createState() => _HomeFuncionarioState();
-}
+  Future<void> sair(
+    BuildContext context,
+  ) async {
+    await Supabase.instance.client.auth.signOut();
 
-class _HomeFuncionarioState extends State<HomeFuncionario> {
+    if (!context.mounted) {
+      return;
+    }
+
+    Navigator.popUntil(
+      context,
+      (route) => route.isFirst,
+    );
+  }
+
   @override
   Widget build(
     BuildContext context,
@@ -20,125 +31,85 @@ class _HomeFuncionarioState extends State<HomeFuncionario> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Painel da Barbearia',
+          'Painel Administrativo',
         ),
       ),
-
       drawer: Drawer(
         child: ListView(
           children: [
             const DrawerHeader(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-
                 mainAxisAlignment: MainAxisAlignment.center,
-
                 children: [
                   Text(
-                    'Área Administrativa',
-
+                    'Barbearia',
                     style: TextStyle(
-                      fontSize: 22,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   SizedBox(
-                    height: 8,
+                    height: 10,
                   ),
-
                   Text(
-                    'Gerenciamento',
+                    'Administrador',
                   ),
                 ],
               ),
             ),
-
-            ListTile(
-              leading: const Icon(
-                Icons.people,
-              ),
-
-              title: const Text(
-                'Profissionais',
-              ),
-
-              onTap: () {
-                Navigator.push(
-                  context,
-
-                  MaterialPageRoute(
-                    builder: (_) => const TelaProfissionais(),
-                  ),
-                );
-              },
-            ),
-
             ListTile(
               leading: const Icon(
                 Icons.content_cut,
               ),
-
               title: const Text(
                 'Serviços',
               ),
-
               onTap: () {
                 Navigator.push(
                   context,
-
                   MaterialPageRoute(
                     builder: (_) => const TelaServicos(),
                   ),
                 );
               },
             ),
-
             ListTile(
               leading: const Icon(
-                Icons.schedule,
+                Icons.calendar_month,
               ),
-
               title: const Text(
-                'Horários',
+                'Agendamentos',
               ),
-
               onTap: () {
                 Navigator.push(
                   context,
-
                   MaterialPageRoute(
-                    builder: (_) => const TelaHorarios(),
+                    builder: (_) => const MeusAgendamentos(),
                   ),
                 );
               },
             ),
-
             const Divider(),
-
             ListTile(
               leading: const Icon(
                 Icons.logout,
               ),
-
               title: const Text(
                 'Sair',
               ),
-
               onTap: () {
-                Navigator.popUntil(
+                sair(
                   context,
-                  (route) => route.isFirst,
                 );
               },
             ),
           ],
         ),
       ),
-
       body: const Center(
         child: Text(
-          'Bem-vindo ao painel do funcionário',
+          'Bem-vindo ao painel administrativo',
         ),
       ),
     );
