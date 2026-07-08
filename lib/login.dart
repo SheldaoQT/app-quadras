@@ -1,6 +1,8 @@
 import 'package:app_barba/cadastro_cliente.dart';
 import 'package:app_barba/home_cliente.dart';
 import 'package:app_barba/home_funcionario.dart';
+import 'package:app_barba/recuperar_senha.dart';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -15,17 +17,21 @@ class TelaLogin extends StatefulWidget {
 
 class _TelaLoginState extends State<TelaLogin> {
   bool obscureText = true;
+  bool carregando = false;
 
   final formKey = GlobalKey<FormState>();
 
   final emailController = TextEditingController();
-
   final senhaController = TextEditingController();
 
   Future<void> autenticar() async {
     if (!formKey.currentState!.validate()) {
       return;
     }
+
+    setState(() {
+      carregando = true;
+    });
 
     try {
       final supabase = Supabase.instance.client;
@@ -40,13 +46,6 @@ class _TelaLoginState extends State<TelaLogin> {
       }
 
       final dados = await supabase.from('usuarios').select().eq('id', resposta.user!.id).single();
-
-      // ===== DEBUG =====
-      print('---------------------------');
-      print('ID: ${resposta.user!.id}');
-      print('Nome: ${dados['nome']}');
-      print('Perfil: ${dados['perfil']}');
-      print('---------------------------');
 
       final perfil = dados['perfil'];
 
@@ -66,14 +65,16 @@ class _TelaLoginState extends State<TelaLogin> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text(
-            e.toString(),
-          ),
+          content: Text(e.toString()),
         ),
       );
-
-      print(e);
     }
+
+    if (!mounted) return;
+
+    setState(() {
+      carregando = false;
+    });
   }
 
   @override
@@ -95,6 +96,11 @@ class _TelaLoginState extends State<TelaLogin> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  const Icon(
+                    Icons.content_cut,
+                    size: 80,
+                  ),
+                  const SizedBox(height: 12),
                   const Text(
                     'Barbearia',
                     style: TextStyle(
@@ -102,9 +108,7 @@ class _TelaLoginState extends State<TelaLogin> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(
-                    height: 30,
-                  ),
+                  const SizedBox(height: 30),
                   TextFormField(
                     controller: emailController,
                     decoration: const InputDecoration(
@@ -116,12 +120,14 @@ class _TelaLoginState extends State<TelaLogin> {
                         return 'Campo obrigatório';
                       }
 
+                      if (!value.contains('@')) {
+                        return 'E-mail inválido';
+                      }
+
                       return null;
                     },
                   ),
-                  const SizedBox(
-                    height: 16,
-                  ),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: senhaController,
                     obscureText: obscureText,
@@ -147,30 +153,39 @@ class _TelaLoginState extends State<TelaLogin> {
                       return null;
                     },
                   ),
-                  const SizedBox(
-                    height: 20,
-                  ),
+                  const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: autenticar,
-                      child: const Text(
-                        'Entrar',
-                      ),
+                      onPressed: carregando ? null : autenticar,
+                      child: carregando ? const CircularProgressIndicator() : const Text('Entrar'),
                     ),
                   ),
                   TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const CadastroCliente(),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      'Criar conta',
-                    ),
+                    onPressed: carregando
+                        ? null
+                        : () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const RecuperarSenha(),
+                              ),
+                            );
+                          },
+                    child: const Text('Esqueci minha senha'),
+                  ),
+                  TextButton(
+                    onPressed: carregando
+                        ? null
+                        : () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const CadastroCliente(),
+                              ),
+                            );
+                          },
+                    child: const Text('Criar conta'),
                   ),
                 ],
               ),

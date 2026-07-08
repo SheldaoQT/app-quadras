@@ -1,23 +1,60 @@
+import 'package:app_barba/cadastro_agendamento.dart';
 import 'package:app_barba/meus_agendamentos.dart';
 import 'package:app_barba/tela_profissionais.dart';
 import 'package:app_barba/tela_servico.dart';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class HomeCliente extends StatelessWidget {
-  const HomeCliente({
-    super.key,
-  });
+class HomeCliente extends StatefulWidget {
+  const HomeCliente({super.key});
 
-  Future<void> sair(
-    BuildContext context,
-  ) async {
+  @override
+  State<HomeCliente> createState() => _HomeClienteState();
+}
+
+class _HomeClienteState extends State<HomeCliente> {
+  bool carregando = true;
+
+  String nomeCliente = '';
+  Map? proximoAgendamento;
+
+  @override
+  void initState() {
+    super.initState();
+    carregarDados();
+  }
+
+  Future<void> carregarDados() async {
+    final supabase = Supabase.instance.client;
+    final usuario = supabase.auth.currentUser;
+
+    if (usuario == null) return;
+
+    final dadosUsuario = await supabase.from('usuarios').select().eq('id', usuario.id).single();
+
+    final agora = DateTime.now();
+
+    final agendamentos = await supabase.from('agendamentos').select('''
+          *,
+          servicos(*),
+          barbeiro:usuarios!agendamentos_barbeiro_id_fkey(*)
+        ''').eq('cliente_id', usuario.id).neq('status', 'cancelado').gte('data_hora', agora.toIso8601String()).order('data_hora').limit(1);
+
+    if (!mounted) return;
+
+    setState(() {
+      nomeCliente = dadosUsuario['nome'] ?? '';
+      proximoAgendamento = agendamentos.isNotEmpty ? agendamentos.first : null;
+      carregando = false;
+    });
+  }
+
+  Future<void> sair() async {
     await Supabase.instance.client.auth.signOut();
 
-    if (!context.mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     Navigator.popUntil(
       context,
@@ -25,63 +62,186 @@ class HomeCliente extends StatelessWidget {
     );
   }
 
-  @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Área do Cliente',
+  Widget botaoMenu({
+    required IconData icon,
+    required String titulo,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      elevation: 2,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Colors.brown.shade100,
+          child: Icon(
+            icon,
+            color: Colors.brown,
+          ),
         ),
+        title: Text(
+          titulo,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios),
+        onTap: onTap,
       ),
-      drawer: Drawer(
-        child: ListView(
+    );
+  }
+
+  Widget cardProximoAgendamento() {
+    if (proximoAgendamento == null) {
+      return Card(
+        elevation: 2,
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: Colors.orange.shade100,
+            child: const Icon(
+              Icons.event_busy,
+              color: Colors.orange,
+            ),
+          ),
+          title: const Text('Nenhum agendamento futuro'),
+          subtitle: const Text('Clique em Agendar para marcar um horário.'),
+        ),
+      );
+    }
+
+    final data = DateTime.parse(
+      proximoAgendamento!['data_hora'],
+    );
+
+    final servico = proximoAgendamento!['servicos'];
+    final barbeiro = proximoAgendamento!['barbeiro'];
+
+    return Card(
+      elevation: 3,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const DrawerHeader(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Barbearia',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(
-                    height: 10,
-                  ),
-                  Text(
-                    'Cliente',
-                  ),
-                ],
+            const Text(
+              'Próximo atendimento',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
               ),
             ),
-            ListTile(
-              leading: const Icon(
-                Icons.calendar_month,
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.calendar_month),
+                const SizedBox(width: 8),
+                Text(DateFormat('dd/MM/yyyy').format(data)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.access_time),
+                const SizedBox(width: 8),
+                Text(DateFormat('HH:mm').format(data)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.person),
+                const SizedBox(width: 8),
+                Text(barbeiro?['nome'] ?? 'Barbeiro não informado'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.content_cut),
+                const SizedBox(width: 8),
+                Text(servico?['nome'] ?? 'Serviço não informado'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (carregando) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Área do Cliente'),
+        actions: [
+          IconButton(
+            tooltip: 'Atualizar',
+            icon: const Icon(Icons.refresh),
+            onPressed: carregarDados,
+          ),
+          IconButton(
+            tooltip: 'Sair',
+            icon: const Icon(Icons.logout),
+            onPressed: sair,
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: carregarDados,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              'Olá, $nomeCliente 👋',
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
               ),
-              title: const Text(
-                'Meus Agendamentos',
-              ),
-              onTap: () {
-                Navigator.push(
+            ),
+            const Text(
+              'Bem-vindo à Barbearia',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 20),
+            cardProximoAgendamento(),
+            const SizedBox(height: 20),
+            botaoMenu(
+              icon: Icons.add_circle,
+              titulo: 'Agendar horário',
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CadastroAgendamento(),
+                  ),
+                );
+
+                await carregarDados();
+              },
+            ),
+            botaoMenu(
+              icon: Icons.calendar_month,
+              titulo: 'Meus Agendamentos',
+              onTap: () async {
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => const MeusAgendamentos(),
                   ),
                 );
+
+                await carregarDados();
               },
             ),
-            ListTile(
-              leading: const Icon(
-                Icons.people,
-              ),
-              title: const Text(
-                'Profissionais',
-              ),
+            botaoMenu(
+              icon: Icons.people,
+              titulo: 'Barbeiros',
               onTap: () {
                 Navigator.push(
                   context,
@@ -91,13 +251,9 @@ class HomeCliente extends StatelessWidget {
                 );
               },
             ),
-            ListTile(
-              leading: const Icon(
-                Icons.content_cut,
-              ),
-              title: const Text(
-                'Serviços',
-              ),
+            botaoMenu(
+              icon: Icons.content_cut,
+              titulo: 'Serviços',
               onTap: () {
                 Navigator.push(
                   context,
@@ -107,113 +263,7 @@ class HomeCliente extends StatelessWidget {
                 );
               },
             ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(
-                Icons.logout,
-              ),
-              title: const Text(
-                'Sair',
-              ),
-              onTap: () {
-                sair(
-                  context,
-                );
-              },
-            ),
           ],
-        ),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(
-            16,
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.content_cut,
-                size: 80,
-              ),
-              const SizedBox(
-                height: 20,
-              ),
-              const Text(
-                'Bem-vindo à Barbearia',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(
-                height: 30,
-              ),
-              SizedBox(
-                width: 300,
-                child: ElevatedButton.icon(
-                  icon: const Icon(
-                    Icons.calendar_month,
-                  ),
-                  label: const Text(
-                    'Meus Agendamentos',
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const MeusAgendamentos(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(
-                height: 12,
-              ),
-              SizedBox(
-                width: 300,
-                child: ElevatedButton.icon(
-                  icon: const Icon(
-                    Icons.people,
-                  ),
-                  label: const Text(
-                    'Profissionais',
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const TelaProfissionais(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(
-                height: 12,
-              ),
-              SizedBox(
-                width: 300,
-                child: ElevatedButton.icon(
-                  icon: const Icon(
-                    Icons.content_cut,
-                  ),
-                  label: const Text(
-                    'Serviços',
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const TelaServicos(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

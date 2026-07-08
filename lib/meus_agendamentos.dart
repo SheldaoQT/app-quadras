@@ -13,6 +13,7 @@ class MeusAgendamentos extends StatefulWidget {
 
 class _MeusAgendamentosState extends State<MeusAgendamentos> {
   bool carregando = true;
+  bool mostrarCancelados = false;
 
   List<dynamic> lista = [];
 
@@ -31,11 +32,17 @@ class _MeusAgendamentosState extends State<MeusAgendamentos> {
         return;
       }
 
-      final resposta = await supabase.from('agendamentos').select('''
+      var consulta = supabase.from('agendamentos').select('''
             *,
             servicos(*),
-            funcionario:usuarios!agendamentos_funcionario_id_fkey(*)
-          ''').eq('cliente_id', usuario.id).neq('status', 'cancelado').order('data_hora');
+            barbeiro:usuarios!agendamentos_barbeiro_id_fkey(*)
+          ''').eq('cliente_id', usuario.id);
+
+      if (!mostrarCancelados) {
+        consulta = consulta.neq('status', 'cancelado');
+      }
+
+      final resposta = await consulta.order('data_hora');
 
       if (!mounted) return;
 
@@ -43,12 +50,19 @@ class _MeusAgendamentosState extends State<MeusAgendamentos> {
         lista = resposta;
         carregando = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
 
       setState(() {
         carregando = false;
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -60,30 +74,89 @@ class _MeusAgendamentosState extends State<MeusAgendamentos> {
     await buscar();
   }
 
+  Future<void> limparCancelados() async {
+    final usuario = Supabase.instance.client.auth.currentUser;
+
+    if (usuario == null) return;
+
+    await Supabase.instance.client.from('agendamentos').delete().eq('cliente_id', usuario.id).eq('status', 'cancelado');
+
+    await buscar();
+  }
+
+  Future<void> confirmarLimparCancelados() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Limpar cancelados'),
+          content: const Text(
+            'Deseja excluir todos os agendamentos cancelados?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Excluir'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar == true) {
+      await limparCancelados();
+    }
+  }
+
+  Color corStatus(String status) {
+    if (status == 'concluido') {
+      return Colors.green;
+    }
+
+    if (status == 'cancelado') {
+      return Colors.red;
+    }
+
+    return Colors.orange;
+  }
+
   Widget item(Map agendamento) {
     final data = DateTime.parse(
       agendamento['data_hora'],
     );
 
     final servico = agendamento['servicos'];
-    final funcionario = agendamento['funcionario'];
+    final barbeiro = agendamento['barbeiro'];
+    final status = agendamento['status'] ?? 'pendente';
 
     return Card(
       child: ListTile(
-        leading: const Icon(
-          Icons.calendar_month,
+        leading: CircleAvatar(
+          backgroundColor: corStatus(status),
+          child: const Icon(
+            Icons.calendar_month,
+            color: Colors.white,
+          ),
         ),
         title: Text(
           servico?['nome'] ?? 'Serviço',
         ),
         subtitle: Text(
           '''
-funcionario: ${funcionario?['nome'] ?? 'Não informado'}
-${DateFormat('dd/MM/yyyy HH:mm').format(data)}
-Status: ${agendamento['status']}
+Barbeiro: ${barbeiro?['nome'] ?? 'Não informado'}
+Data: ${DateFormat('dd/MM/yyyy HH:mm').format(data)}
+Status: $status
 ''',
         ),
-        trailing: agendamento['status'] == 'pendente'
+        trailing: status == 'pendente'
             ? IconButton(
                 icon: const Icon(
                   Icons.cancel,
@@ -106,9 +179,28 @@ Status: ${agendamento['status']}
   ) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Meus Agendamentos',
-        ),
+        title: const Text('Meus Agendamentos'),
+        actions: [
+          IconButton(
+            tooltip: mostrarCancelados ? 'Ocultar cancelados' : 'Mostrar cancelados',
+            icon: Icon(
+              mostrarCancelados ? Icons.visibility_off : Icons.visibility,
+            ),
+            onPressed: () async {
+              setState(() {
+                mostrarCancelados = !mostrarCancelados;
+                carregando = true;
+              });
+
+              await buscar();
+            },
+          ),
+          IconButton(
+            tooltip: 'Limpar cancelados',
+            icon: const Icon(Icons.delete_sweep),
+            onPressed: confirmarLimparCancelados,
+          ),
+        ],
       ),
       body: carregando
           ? const Center(
@@ -123,18 +215,15 @@ Status: ${agendamento['status']}
               : RefreshIndicator(
                   onRefresh: buscar,
                   child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
                     itemCount: lista.length,
                     itemBuilder: (context, index) {
-                      return item(
-                        lista[index],
-                      );
+                      return item(lista[index]);
                     },
                   ),
                 ),
       floatingActionButton: FloatingActionButton(
-        child: const Icon(
-          Icons.add,
-        ),
+        child: const Icon(Icons.add),
         onPressed: () async {
           await Navigator.push(
             context,
@@ -143,7 +232,7 @@ Status: ${agendamento['status']}
             ),
           );
 
-          buscar();
+          await buscar();
         },
       ),
     );

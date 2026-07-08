@@ -29,6 +29,21 @@ class _CadastroServicoState extends State<CadastroServico> {
     buscarFuncionarios();
   }
 
+  Future<bool> usuarioPodeCadastrar() async {
+    final supabase = Supabase.instance.client;
+    final usuario = supabase.auth.currentUser;
+
+    if (usuario == null) {
+      return false;
+    }
+
+    final dados = await supabase.from('usuarios').select('perfil').eq('id', usuario.id).single();
+
+    final perfil = dados['perfil'];
+
+    return perfil == 'funcionario' || perfil == 'admin';
+  }
+
   Future<void> buscarFuncionarios() async {
     try {
       final resposta = await Supabase.instance.client.from('usuarios').select().eq('perfil', 'funcionario').eq('ativo', true).order('nome');
@@ -51,6 +66,19 @@ class _CadastroServicoState extends State<CadastroServico> {
   }
 
   Future<void> cadastrar() async {
+    final permitido = await usuarioPodeCadastrar();
+
+    if (!permitido) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Apenas funcionários podem cadastrar serviços'),
+          backgroundColor: Colors.red,
+        ),
+      );
+
+      return;
+    }
+
     if (funcionarioSelecionado == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -58,6 +86,7 @@ class _CadastroServicoState extends State<CadastroServico> {
           backgroundColor: Colors.orange,
         ),
       );
+
       return;
     }
 
@@ -88,10 +117,6 @@ class _CadastroServicoState extends State<CadastroServico> {
 
       Navigator.pop(context);
     } on PostgrestException catch (e) {
-      print('Erro Supabase: ${e.message}');
-      print('Código: ${e.code}');
-      print('Detalhes: ${e.details}');
-
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -101,8 +126,6 @@ class _CadastroServicoState extends State<CadastroServico> {
         ),
       );
     } catch (e) {
-      print(e);
-
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
