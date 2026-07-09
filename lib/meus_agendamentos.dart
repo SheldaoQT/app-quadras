@@ -13,7 +13,6 @@ class MeusAgendamentos extends StatefulWidget {
 
 class _MeusAgendamentosState extends State<MeusAgendamentos> {
   bool carregando = true;
-  bool mostrarCancelados = false;
 
   List<dynamic> lista = [];
 
@@ -32,17 +31,11 @@ class _MeusAgendamentosState extends State<MeusAgendamentos> {
         return;
       }
 
-      var consulta = supabase.from('agendamentos').select('''
+      final resposta = await supabase.from('agendamentos').select('''
             *,
             servicos(*),
             barbeiro:usuarios!agendamentos_barbeiro_id_fkey(*)
-          ''').eq('cliente_id', usuario.id);
-
-      if (!mostrarCancelados) {
-        consulta = consulta.neq('status', 'cancelado');
-      }
-
-      final resposta = await consulta.order('data_hora');
+          ''').eq('cliente_id', usuario.id).order('data_hora', ascending: false);
 
       if (!mounted) return;
 
@@ -74,37 +67,27 @@ class _MeusAgendamentosState extends State<MeusAgendamentos> {
     await buscar();
   }
 
-  Future<void> limparCancelados() async {
-    final usuario = Supabase.instance.client.auth.currentUser;
-
-    if (usuario == null) return;
-
-    await Supabase.instance.client.from('agendamentos').delete().eq('cliente_id', usuario.id).eq('status', 'cancelado');
-
-    await buscar();
-  }
-
-  Future<void> confirmarLimparCancelados() async {
+  Future<void> confirmarCancelamento(int id) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Limpar cancelados'),
+          title: const Text('Cancelar agendamento'),
           content: const Text(
-            'Deseja excluir todos os agendamentos cancelados?',
+            'Deseja realmente cancelar este agendamento?',
           ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.pop(context, false);
               },
-              child: const Text('Cancelar'),
+              child: const Text('Não'),
             ),
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context, true);
               },
-              child: const Text('Excluir'),
+              child: const Text('Sim, cancelar'),
             ),
           ],
         );
@@ -112,7 +95,7 @@ class _MeusAgendamentosState extends State<MeusAgendamentos> {
     );
 
     if (confirmar == true) {
-      await limparCancelados();
+      await cancelar(id);
     }
   }
 
@@ -126,6 +109,25 @@ class _MeusAgendamentosState extends State<MeusAgendamentos> {
     }
 
     return Colors.orange;
+  }
+
+  String textoStatus(String status) {
+    if (status == 'concluido') {
+      return 'Concluído';
+    }
+
+    if (status == 'cancelado') {
+      return 'Cancelado';
+    }
+
+    return 'Pendente';
+  }
+
+  bool podeCancelar(Map agendamento) {
+    final status = agendamento['status'] ?? 'pendente';
+    final data = DateTime.parse(agendamento['data_hora']);
+
+    return status == 'pendente' && data.isAfter(DateTime.now());
   }
 
   Widget item(Map agendamento) {
@@ -153,17 +155,18 @@ class _MeusAgendamentosState extends State<MeusAgendamentos> {
           '''
 Barbeiro: ${barbeiro?['nome'] ?? 'Não informado'}
 Data: ${DateFormat('dd/MM/yyyy HH:mm').format(data)}
-Status: $status
+Status: ${textoStatus(status)}
 ''',
         ),
-        trailing: status == 'pendente'
+        trailing: podeCancelar(agendamento)
             ? IconButton(
+                tooltip: 'Cancelar agendamento',
                 icon: const Icon(
                   Icons.cancel,
                   color: Colors.red,
                 ),
                 onPressed: () {
-                  cancelar(
+                  confirmarCancelamento(
                     agendamento['id'],
                   );
                 },
@@ -179,28 +182,7 @@ Status: $status
   ) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Meus Agendamentos'),
-        actions: [
-          IconButton(
-            tooltip: mostrarCancelados ? 'Ocultar cancelados' : 'Mostrar cancelados',
-            icon: Icon(
-              mostrarCancelados ? Icons.visibility_off : Icons.visibility,
-            ),
-            onPressed: () async {
-              setState(() {
-                mostrarCancelados = !mostrarCancelados;
-                carregando = true;
-              });
-
-              await buscar();
-            },
-          ),
-          IconButton(
-            tooltip: 'Limpar cancelados',
-            icon: const Icon(Icons.delete_sweep),
-            onPressed: confirmarLimparCancelados,
-          ),
-        ],
+        title: const Text('Histórico de Agendamentos'),
       ),
       body: carregando
           ? const Center(
@@ -222,8 +204,9 @@ Status: $status
                     },
                   ),
                 ),
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.add),
+        label: const Text('Novo agendamento'),
         onPressed: () async {
           await Navigator.push(
             context,

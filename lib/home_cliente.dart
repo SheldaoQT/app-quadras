@@ -1,7 +1,5 @@
 import 'package:app_barba/cadastro_agendamento.dart';
 import 'package:app_barba/meus_agendamentos.dart';
-import 'package:app_barba/tela_profissionais.dart';
-import 'package:app_barba/tela_servico.dart';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -18,7 +16,7 @@ class _HomeClienteState extends State<HomeCliente> {
   bool carregando = true;
 
   String nomeCliente = '';
-  Map? proximoAgendamento;
+  List<dynamic> agendamentosPendentes = [];
 
   @override
   void initState() {
@@ -36,17 +34,19 @@ class _HomeClienteState extends State<HomeCliente> {
 
     final agora = DateTime.now();
 
-    final agendamentos = await supabase.from('agendamentos').select('''
-          *,
-          servicos(*),
-          barbeiro:usuarios!agendamentos_barbeiro_id_fkey(*)
-        ''').eq('cliente_id', usuario.id).neq('status', 'cancelado').gte('data_hora', agora.toIso8601String()).order('data_hora').limit(1);
+    final agendamentos = await supabase
+        .from('agendamentos')
+        .select()
+        .eq('cliente_id', usuario.id)
+        .eq('status', 'pendente')
+        .gte('data_hora', agora.toIso8601String())
+        .order('data_hora');
 
     if (!mounted) return;
 
     setState(() {
       nomeCliente = dadosUsuario['nome'] ?? '';
-      proximoAgendamento = agendamentos.isNotEmpty ? agendamentos.first : null;
+      agendamentosPendentes = agendamentos;
       carregando = false;
     });
   }
@@ -59,6 +59,51 @@ class _HomeClienteState extends State<HomeCliente> {
     Navigator.popUntil(
       context,
       (route) => route.isFirst,
+    );
+  }
+
+  Future<void> cancelarAgendamento(Map agendamento) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Cancelar atendimento'),
+          content: const Text(
+            'Deseja realmente cancelar este atendimento?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Não'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Sim, cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar != true) return;
+
+    await Supabase.instance.client.from('agendamentos').update({
+      'status': 'cancelado',
+    }).eq('id', agendamento['id']);
+
+    await carregarDados();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Atendimento cancelado'),
+        backgroundColor: Colors.green,
+      ),
     );
   }
 
@@ -89,8 +134,8 @@ class _HomeClienteState extends State<HomeCliente> {
     );
   }
 
-  Widget cardProximoAgendamento() {
-    if (proximoAgendamento == null) {
+  Widget listaAtendimentosPendentes() {
+    if (agendamentosPendentes.isEmpty) {
       return Card(
         elevation: 2,
         child: ListTile(
@@ -101,65 +146,62 @@ class _HomeClienteState extends State<HomeCliente> {
               color: Colors.orange,
             ),
           ),
-          title: const Text('Nenhum agendamento futuro'),
+          title: const Text('Nenhum atendimento pendente'),
           subtitle: const Text('Clique em Agendar para marcar um horário.'),
         ),
       );
     }
 
-    final data = DateTime.parse(
-      proximoAgendamento!['data_hora'],
-    );
-
-    final servico = proximoAgendamento!['servicos'];
-    final barbeiro = proximoAgendamento!['barbeiro'];
-
     return Card(
-      elevation: 3,
+      elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(
+          vertical: 8,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Próximo atendimento',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Text(
+                'Atendimentos pendentes',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(Icons.calendar_month),
-                const SizedBox(width: 8),
-                Text(DateFormat('dd/MM/yyyy').format(data)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.access_time),
-                const SizedBox(width: 8),
-                Text(DateFormat('HH:mm').format(data)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.person),
-                const SizedBox(width: 8),
-                Text(barbeiro?['nome'] ?? 'Barbeiro não informado'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.content_cut),
-                const SizedBox(width: 8),
-                Text(servico?['nome'] ?? 'Serviço não informado'),
-              ],
-            ),
+            ...agendamentosPendentes.map((agendamento) {
+              final data = DateTime.parse(
+                agendamento['data_hora'],
+              );
+
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.brown.shade100,
+                  child: const Icon(
+                    Icons.event,
+                    color: Colors.brown,
+                  ),
+                ),
+                title: Text(
+                  DateFormat('dd/MM/yyyy').format(data),
+                ),
+                subtitle: Text(
+                  DateFormat('HH:mm').format(data),
+                ),
+                trailing: IconButton(
+                  tooltip: 'Cancelar atendimento',
+                  icon: const Icon(
+                    Icons.cancel,
+                    color: Colors.red,
+                  ),
+                  onPressed: () {
+                    cancelarAgendamento(agendamento);
+                  },
+                ),
+              );
+            }),
           ],
         ),
       ),
@@ -198,7 +240,7 @@ class _HomeClienteState extends State<HomeCliente> {
           padding: const EdgeInsets.all(16),
           children: [
             Text(
-              'Olá, $nomeCliente 👋',
+              'Olá, $nomeCliente',
               style: const TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -209,7 +251,7 @@ class _HomeClienteState extends State<HomeCliente> {
               style: TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 20),
-            cardProximoAgendamento(),
+            listaAtendimentosPendentes(),
             const SizedBox(height: 20),
             botaoMenu(
               icon: Icons.add_circle,
@@ -227,7 +269,7 @@ class _HomeClienteState extends State<HomeCliente> {
             ),
             botaoMenu(
               icon: Icons.calendar_month,
-              titulo: 'Meus Agendamentos',
+              titulo: 'Histórico de Agendamentos',
               onTap: () async {
                 await Navigator.push(
                   context,
@@ -237,30 +279,6 @@ class _HomeClienteState extends State<HomeCliente> {
                 );
 
                 await carregarDados();
-              },
-            ),
-            botaoMenu(
-              icon: Icons.people,
-              titulo: 'Barbeiros',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const TelaProfissionais(),
-                  ),
-                );
-              },
-            ),
-            botaoMenu(
-              icon: Icons.content_cut,
-              titulo: 'Serviços',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const TelaServicos(),
-                  ),
-                );
               },
             ),
           ],
