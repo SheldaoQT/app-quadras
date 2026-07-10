@@ -1,6 +1,6 @@
 import 'package:app_barba/cadastro_agendamento.dart';
 import 'package:app_barba/meus_agendamentos.dart';
-
+import 'package:app_barba/login.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -56,9 +56,12 @@ class _HomeClienteState extends State<HomeCliente> {
 
     if (!mounted) return;
 
-    Navigator.popUntil(
+    Navigator.pushAndRemoveUntil(
       context,
-      (route) => route.isFirst,
+      MaterialPageRoute(
+        builder: (_) => const TelaLogin(),
+      ),
+      (route) => false,
     );
   }
 

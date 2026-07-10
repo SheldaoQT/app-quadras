@@ -76,7 +76,12 @@ class _TelaBarbeirosState extends State<TelaBarbeiros> {
                   ),
                   const SizedBox(height: 16),
                   SwitchListTile(
-                    title: const Text('Ativo'),
+                    title: Text(
+                      ativo ? 'Ativado' : 'Desativado',
+                    ),
+                    subtitle: Text(
+                      ativo ? 'Barbeiro disponível no sistema' : 'Barbeiro oculto para novos agendamentos',
+                    ),
                     value: ativo,
                     onChanged: (value) {
                       setStateDialog(() {
@@ -119,31 +124,30 @@ class _TelaBarbeirosState extends State<TelaBarbeiros> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Barbeiro atualizado'),
+      SnackBar(
+        content: Text(
+          ativo ? 'Barbeiro ativado' : 'Barbeiro desativado',
+        ),
         backgroundColor: Colors.green,
       ),
     );
   }
 
-  Future<bool> barbeiroPossuiVinculos(String id) async {
-    final servicos = await Supabase.instance.client.from('servicos').select('id').eq('barbeiro_id', id);
+  Future<void> alterarStatusBarbeiro(Map barbeiro) async {
+    final ativoAtual = barbeiro['ativo'] ?? true;
+    final novoStatus = !ativoAtual;
 
-    final horarios = await Supabase.instance.client.from('horarios').select('id').eq('barbeiro_id', id);
-
-    final agendamentos = await Supabase.instance.client.from('agendamentos').select('id').eq('barbeiro_id', id);
-
-    return servicos.isNotEmpty || horarios.isNotEmpty || agendamentos.isNotEmpty;
-  }
-
-  Future<void> confirmarExclusao(Map barbeiro) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Excluir barbeiro'),
+          title: Text(
+            novoStatus ? 'Ativar barbeiro' : 'Desativar barbeiro',
+          ),
           content: Text(
-            'Deseja excluir o barbeiro "${barbeiro['nome']}"?',
+            novoStatus
+                ? 'Deseja ativar o barbeiro "${barbeiro['nome']}"?'
+                : 'Deseja desativar o barbeiro "${barbeiro['nome']}"? Ele não aparecerá para novos agendamentos.',
           ),
           actions: [
             TextButton(
@@ -156,61 +160,33 @@ class _TelaBarbeirosState extends State<TelaBarbeiros> {
               onPressed: () {
                 Navigator.pop(context, true);
               },
-              child: const Text('Excluir'),
+              child: Text(
+                novoStatus ? 'Ativar' : 'Desativar',
+              ),
             ),
           ],
         );
       },
     );
 
-    if (confirmar == true) {
-      await excluirBarbeiro(barbeiro);
-    }
-  }
+    if (confirmar != true) return;
 
-  Future<void> excluirBarbeiro(Map barbeiro) async {
-    final id = barbeiro['id'];
+    await Supabase.instance.client.from('usuarios').update({
+      'ativo': novoStatus,
+    }).eq('id', barbeiro['id']);
 
-    final possuiVinculos = await barbeiroPossuiVinculos(id);
+    await buscarBarbeiros();
 
-    if (possuiVinculos) {
-      if (!mounted) return;
+    if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Não é possível excluir: existem serviços, horários ou agendamentos vinculados a este barbeiro.',
-          ),
-          backgroundColor: Colors.red,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          novoStatus ? 'Barbeiro ativado' : 'Barbeiro desativado',
         ),
-      );
-
-      return;
-    }
-
-    try {
-      await Supabase.instance.client.from('usuarios').delete().eq('id', id);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Barbeiro excluído'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      await buscarBarbeiros();
-    } on PostgrestException catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erro ao excluir: ${e.message}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   Widget cardBarbeiro(Map barbeiro) {
@@ -219,19 +195,39 @@ class _TelaBarbeirosState extends State<TelaBarbeiros> {
     return Card(
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: ativo ? null : Colors.grey.shade300,
-          child: const Icon(Icons.person),
+          backgroundColor: ativo ? Colors.brown.shade100 : Colors.grey.shade300,
+          child: Icon(
+            Icons.person,
+            color: ativo ? Colors.brown : Colors.grey,
+          ),
         ),
-        title: Text(barbeiro['nome'] ?? ''),
+        title: Text(
+          barbeiro['nome'] ?? '',
+          style: TextStyle(
+            color: ativo ? null : Colors.grey,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         subtitle: Text(
           '''
 Especialidade: ${barbeiro['especialidade'] ?? 'Não informada'}
-Status: ${ativo ? 'Ativo' : 'Inativo'}
+Status: ${ativo ? 'Ativado' : 'Desativado'}
 ''',
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              tooltip: ativo ? 'Desativar' : 'Ativar',
+              icon: Icon(
+                ativo ? Icons.toggle_on : Icons.toggle_off,
+                color: ativo ? Colors.green : Colors.grey,
+                size: 32,
+              ),
+              onPressed: () {
+                alterarStatusBarbeiro(barbeiro);
+              },
+            ),
             IconButton(
               tooltip: 'Editar',
               icon: const Icon(
@@ -240,16 +236,6 @@ Status: ${ativo ? 'Ativo' : 'Inativo'}
               ),
               onPressed: () {
                 editarBarbeiro(barbeiro);
-              },
-            ),
-            IconButton(
-              tooltip: 'Excluir',
-              icon: const Icon(
-                Icons.delete,
-                color: Colors.red,
-              ),
-              onPressed: () {
-                confirmarExclusao(barbeiro);
               },
             ),
           ],

@@ -19,6 +19,9 @@ class _TelaAgendamentosState extends State<TelaAgendamentos> {
   List<dynamic> agendamentos = [];
   Set<String> diasComAgendamentoPendente = {};
 
+  String? usuarioLogadoId;
+  String perfilUsuario = '';
+
   @override
   void initState() {
     super.initState();
@@ -30,8 +33,25 @@ class _TelaAgendamentosState extends State<TelaAgendamentos> {
       carregando = true;
     });
 
+    await carregarUsuarioLogado();
     await buscarDiasComAgendamentoPendente();
     await buscarAgendamentos();
+  }
+
+  Future<void> carregarUsuarioLogado() async {
+    final usuario = Supabase.instance.client.auth.currentUser;
+
+    if (usuario == null) return;
+
+    usuarioLogadoId = usuario.id;
+
+    final dados = await Supabase.instance.client.from('usuarios').select('perfil').eq('id', usuario.id).single();
+
+    perfilUsuario = dados['perfil'].toString().toLowerCase().trim();
+  }
+
+  bool get usuarioAdmin {
+    return perfilUsuario.contains('admin');
   }
 
   DateTime inicioDoDia(DateTime data) {
@@ -66,17 +86,31 @@ class _TelaAgendamentosState extends State<TelaAgendamentos> {
     return dataSemHora.isBefore(hojeSemHora);
   }
 
+  bool podeAlterarAgendamento(Map agendamento) {
+    if (usuarioAdmin) {
+      return true;
+    }
+
+    return agendamento['barbeiro_id'] == usuarioLogadoId;
+  }
+
   Future<void> buscarDiasComAgendamentoPendente() async {
     try {
       final inicio = inicioDoMes(dataFocada);
       final fim = fimDoMes(dataFocada);
 
-      final resposta = await Supabase.instance.client
+      var consulta = Supabase.instance.client
           .from('agendamentos')
           .select('data_hora')
           .eq('status', 'pendente')
           .gte('data_hora', inicio.toIso8601String())
           .lte('data_hora', fim.toIso8601String());
+
+      if (!usuarioAdmin && usuarioLogadoId != null) {
+        consulta = consulta.eq('barbeiro_id', usuarioLogadoId!);
+      }
+
+      final resposta = await consulta;
 
       final Set<String> dias = {};
 
@@ -110,12 +144,18 @@ class _TelaAgendamentosState extends State<TelaAgendamentos> {
       final inicio = inicioDoDia(dataSelecionada);
       final fim = fimDoDia(dataSelecionada);
 
-      final resposta = await Supabase.instance.client.from('agendamentos').select('''
+      var consulta = Supabase.instance.client.from('agendamentos').select('''
             *,
             servicos(*),
             cliente:usuarios!agendamentos_cliente_id_fkey(*),
             barbeiro:usuarios!agendamentos_barbeiro_id_fkey(*)
-          ''').gte('data_hora', inicio.toIso8601String()).lte('data_hora', fim.toIso8601String()).order('data_hora');
+          ''').gte('data_hora', inicio.toIso8601String()).lte('data_hora', fim.toIso8601String());
+
+      if (!usuarioAdmin && usuarioLogadoId != null) {
+        consulta = consulta.eq('barbeiro_id', usuarioLogadoId!);
+      }
+
+      final resposta = await consulta.order('data_hora');
 
       if (!mounted) return;
 
@@ -139,19 +179,39 @@ class _TelaAgendamentosState extends State<TelaAgendamentos> {
     }
   }
 
-  Future<void> concluirAgendamento(int id) async {
+  Future<void> concluirAgendamento(Map agendamento) async {
+    if (!podeAlterarAgendamento(agendamento)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Você não pode alterar agendamentos de outro barbeiro.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     await Supabase.instance.client.from('agendamentos').update({
       'status': 'concluido',
-    }).eq('id', id);
+    }).eq('id', agendamento['id']);
 
     await buscarDiasComAgendamentoPendente();
     await buscarAgendamentos();
   }
 
-  Future<void> cancelarAgendamento(int id) async {
+  Future<void> cancelarAgendamento(Map agendamento) async {
+    if (!podeAlterarAgendamento(agendamento)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Você não pode alterar agendamentos de outro barbeiro.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     await Supabase.instance.client.from('agendamentos').update({
       'status': 'cancelado',
-    }).eq('id', id);
+    }).eq('id', agendamento['id']);
 
     await buscarDiasComAgendamentoPendente();
     await buscarAgendamentos();
@@ -341,11 +401,10 @@ class _TelaAgendamentosState extends State<TelaAgendamentos> {
 
   Widget cardAgendamento(Map agendamento) {
     final data = DateTime.parse(agendamento['data_hora']);
-
     final servico = agendamento['servicos'];
     final cliente = agendamento['cliente'];
-
     final status = agendamento['status'] ?? 'pendente';
+    final podeAlterar = podeAlterarAgendamento(agendamento);
 
     return Card(
       child: ListTile(
@@ -364,7 +423,7 @@ Serviço: ${servico?['nome'] ?? 'Serviço'}
 Status: ${textoStatus(status)}
 ''',
         ),
-        trailing: status == 'pendente'
+        trailing: status == 'pendente' && podeAlterar
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -375,9 +434,7 @@ Status: ${textoStatus(status)}
                       color: Colors.green,
                     ),
                     onPressed: () {
-                      concluirAgendamento(
-                        agendamento['id'],
-                      );
+                      concluirAgendamento(agendamento);
                     },
                   ),
                   IconButton(
@@ -387,9 +444,7 @@ Status: ${textoStatus(status)}
                       color: Colors.red,
                     ),
                     onPressed: () {
-                      cancelarAgendamento(
-                        agendamento['id'],
-                      );
+                      cancelarAgendamento(agendamento);
                     },
                   ),
                 ],

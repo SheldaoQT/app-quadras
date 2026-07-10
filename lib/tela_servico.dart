@@ -11,7 +11,7 @@ class TelaServicos extends StatefulWidget {
 
 class _TelaServicosState extends State<TelaServicos> {
   bool carregando = true;
-  bool podeCadastrar = false;
+  bool podeGerenciar = false;
 
   List<dynamic> servicos = [];
   List<dynamic> barbeiros = [];
@@ -23,6 +23,10 @@ class _TelaServicosState extends State<TelaServicos> {
   }
 
   Future<void> carregarDados() async {
+    setState(() {
+      carregando = true;
+    });
+
     await verificarPermissao();
     await buscarBarbeiros();
     await buscarServicos();
@@ -37,13 +41,16 @@ class _TelaServicosState extends State<TelaServicos> {
   Future<void> verificarPermissao() async {
     final usuario = Supabase.instance.client.auth.currentUser;
 
-    if (usuario == null) return;
+    if (usuario == null) {
+      podeGerenciar = false;
+      return;
+    }
 
     final dados = await Supabase.instance.client.from('usuarios').select('perfil').eq('id', usuario.id).single();
 
-    final perfil = dados['perfil'];
+    final perfil = dados['perfil'].toString().toLowerCase().trim();
 
-    podeCadastrar = perfil == 'funcionario' || perfil == 'admin';
+    podeGerenciar = perfil.contains('admin') || perfil.contains('funcionario');
   }
 
   Future<void> buscarBarbeiros() async {
@@ -61,6 +68,18 @@ class _TelaServicosState extends State<TelaServicos> {
     servicos = resposta;
   }
 
+  Future<bool> servicoPossuiAgendamentos(int id) async {
+    final resposta = await Supabase.instance.client.from('agendamentos').select('id').eq('servico_id', id).limit(1);
+
+    return resposta.isNotEmpty;
+  }
+
+  Future<bool> servicoPossuiAgendamentosPendentes(int id) async {
+    final resposta = await Supabase.instance.client.from('agendamentos').select('id').eq('servico_id', id).eq('status', 'pendente').limit(1);
+
+    return resposta.isNotEmpty;
+  }
+
   Future<void> editarServico(Map item) async {
     final nomeController = TextEditingController(
       text: item['nome'] ?? '',
@@ -75,6 +94,7 @@ class _TelaServicosState extends State<TelaServicos> {
     );
 
     String? barbeiroSelecionado = item['barbeiro_id'];
+    bool ativo = item['ativo'] ?? true;
 
     final salvar = await showDialog<bool>(
       context: context,
@@ -131,9 +151,20 @@ class _TelaServicosState extends State<TelaServicos> {
                       controller: duracaoController,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                        labelText: 'Duração',
+                        labelText: 'Duração em minutos',
                         border: OutlineInputBorder(),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(ativo ? 'Ativado' : 'Desativado'),
+                      value: ativo,
+                      onChanged: (value) {
+                        setStateDialog(() {
+                          ativo = value;
+                        });
+                      },
                     ),
                   ],
                 ),
@@ -176,37 +207,72 @@ class _TelaServicosState extends State<TelaServicos> {
       return;
     }
 
-    await Supabase.instance.client.from('servicos').update({
-      'nome': nomeController.text.trim(),
-      'preco': double.parse(
-        precoController.text.replaceAll(',', '.'),
-      ),
-      'duracao': int.parse(
-        duracaoController.text,
-      ),
-      'barbeiro_id': barbeiroSelecionado,
-    }).eq('id', item['id']);
+    try {
+      await Supabase.instance.client.from('servicos').update({
+        'nome': nomeController.text.trim(),
+        'preco': double.parse(
+          precoController.text.replaceAll(',', '.'),
+        ),
+        'duracao': int.parse(
+          duracaoController.text,
+        ),
+        'barbeiro_id': barbeiroSelecionado,
+        'ativo': ativo,
+      }).eq('id', item['id']);
 
-    await carregarDados();
+      await carregarDados();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Serviço atualizado com sucesso'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> confirmarRemocao(Map item) async {
+    final possuiPendentes = await servicoPossuiAgendamentosPendentes(item['id']);
+
+    if (possuiPendentes) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não é possível remover este serviço porque ele possui agendamentos pendentes.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+
+      return;
+    }
+
+    final possuiHistorico = await servicoPossuiAgendamentos(item['id']);
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Serviço atualizado'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
-  Future<void> confirmarExclusao(Map item) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Excluir serviço'),
+          title: Text(possuiHistorico ? 'Desativar serviço' : 'Excluir serviço'),
           content: Text(
-            'Deseja excluir o serviço "${item['nome']}"?',
+            possuiHistorico
+                ? 'Este serviço possui histórico de agendamentos. Deseja desativá-lo para novos agendamentos?'
+                : 'Deseja excluir o serviço "${item['nome']}"?',
           ),
           actions: [
             TextButton(
@@ -216,18 +282,54 @@ class _TelaServicosState extends State<TelaServicos> {
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: possuiHistorico ? Colors.orange : Colors.red,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () {
                 Navigator.pop(context, true);
               },
-              child: const Text('Excluir'),
+              child: Text(possuiHistorico ? 'Desativar' : 'Excluir'),
             ),
           ],
         );
       },
     );
 
-    if (confirmar == true) {
+    if (confirmar != true) return;
+
+    if (possuiHistorico) {
+      await desativarServico(item['id']);
+    } else {
       await excluirServico(item['id']);
+    }
+  }
+
+  Future<void> desativarServico(int id) async {
+    try {
+      await Supabase.instance.client.from('servicos').update({
+        'ativo': false,
+      }).eq('id', id);
+
+      await carregarDados();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Serviço desativado com sucesso'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -235,49 +337,115 @@ class _TelaServicosState extends State<TelaServicos> {
     try {
       await Supabase.instance.client.from('servicos').delete().eq('id', id);
 
+      await carregarDados();
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Serviço excluído'),
+          content: Text('Serviço excluído com sucesso'),
           backgroundColor: Colors.green,
         ),
       );
-
-      await carregarDados();
     } on PostgrestException catch (e) {
       if (!mounted) return;
 
+      final mensagem = e.message.contains('foreign key')
+          ? 'Não é possível excluir este serviço porque ele possui histórico de agendamentos. Desative o serviço.'
+          : 'Não foi possível excluir: ${e.message}';
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Não foi possível excluir: ${e.message}',
-          ),
+          content: Text(mensagem),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
+  Future<void> alterarStatusServico(Map item) async {
+    final ativoAtual = item['ativo'] ?? true;
+    final novoStatus = !ativoAtual;
+
+    if (!novoStatus) {
+      final possuiPendentes = await servicoPossuiAgendamentosPendentes(item['id']);
+
+      if (possuiPendentes) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não é possível desativar este serviço porque ele possui agendamentos pendentes.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+
+        return;
+      }
+    }
+
+    await Supabase.instance.client.from('servicos').update({
+      'ativo': novoStatus,
+    }).eq('id', item['id']);
+
+    await carregarDados();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          novoStatus ? 'Serviço ativado' : 'Serviço desativado',
+        ),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
   Widget cardServico(Map item) {
     final barbeiro = item['barbeiro'];
+    final ativo = item['ativo'] ?? true;
 
     return Card(
+      color: ativo ? null : Colors.grey.shade100,
       child: ListTile(
-        leading: const Icon(Icons.content_cut),
-        title: Text(item['nome']),
+        leading: Icon(
+          Icons.content_cut,
+          color: ativo ? null : Colors.grey,
+        ),
+        title: Text(
+          item['nome'],
+          style: TextStyle(
+            color: ativo ? null : Colors.grey,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Barbeiro: ${barbeiro?['nome'] ?? 'Não informado'}'),
             Text('R\$ ${item['preco']}'),
             Text('${item['duracao']} min'),
+            Text('Status: ${ativo ? 'Ativado' : 'Desativado'}'),
           ],
         ),
-        trailing: podeCadastrar
+        trailing: podeGerenciar
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  IconButton(
+                    tooltip: ativo ? 'Desativar' : 'Ativar',
+                    icon: Icon(
+                      ativo ? Icons.toggle_on : Icons.toggle_off,
+                      color: ativo ? Colors.green : Colors.grey,
+                      size: 32,
+                    ),
+                    onPressed: () {
+                      alterarStatusServico(item);
+                    },
+                  ),
                   IconButton(
                     tooltip: 'Editar',
                     icon: const Icon(
@@ -289,13 +457,13 @@ class _TelaServicosState extends State<TelaServicos> {
                     },
                   ),
                   IconButton(
-                    tooltip: 'Excluir',
+                    tooltip: ativo ? 'Remover' : 'Excluir',
                     icon: const Icon(
                       Icons.delete,
                       color: Colors.red,
                     ),
                     onPressed: () {
-                      confirmarExclusao(item);
+                      confirmarRemocao(item);
                     },
                   ),
                 ],
@@ -310,6 +478,13 @@ class _TelaServicosState extends State<TelaServicos> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Serviços'),
+        actions: [
+          IconButton(
+            tooltip: 'Atualizar',
+            icon: const Icon(Icons.refresh),
+            onPressed: carregarDados,
+          ),
+        ],
       ),
       body: carregando
           ? const Center(
@@ -317,7 +492,7 @@ class _TelaServicosState extends State<TelaServicos> {
             )
           : servicos.isEmpty
               ? const Center(
-                  child: Text('Nenhum serviço'),
+                  child: Text('Nenhum serviço cadastrado'),
                 )
               : RefreshIndicator(
                   onRefresh: carregarDados,
@@ -329,9 +504,10 @@ class _TelaServicosState extends State<TelaServicos> {
                     },
                   ),
                 ),
-      floatingActionButton: podeCadastrar
-          ? FloatingActionButton(
-              child: const Icon(Icons.add),
+      floatingActionButton: podeGerenciar
+          ? FloatingActionButton.extended(
+              icon: const Icon(Icons.add),
+              label: const Text('Novo serviço'),
               onPressed: () async {
                 await Navigator.push(
                   context,

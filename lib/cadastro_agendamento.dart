@@ -65,7 +65,7 @@ class _CadastroAgendamentoState extends State<CadastroAgendamento> {
   Future<void> buscarServicosDoBarbeiro() async {
     if (barbeiroSelecionado == null) return;
 
-    final resposta = await Supabase.instance.client.from('servicos').select().eq('barbeiro_id', barbeiroSelecionado!).order('nome');
+    final resposta = await Supabase.instance.client.from('servicos').select().eq('barbeiro_id', barbeiroSelecionado!).eq('ativo', true).order('nome');
 
     if (!mounted) return;
 

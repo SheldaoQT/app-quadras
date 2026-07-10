@@ -12,6 +12,8 @@ class DashboardFuncionario extends StatefulWidget {
 class _DashboardFuncionarioState extends State<DashboardFuncionario> {
   bool carregando = true;
 
+  String nomeUsuario = '';
+
   int totalBarbeiros = 0;
   int totalServicos = 0;
   int totalHorarios = 0;
@@ -39,6 +41,15 @@ class _DashboardFuncionarioState extends State<DashboardFuncionario> {
     });
 
     final supabase = Supabase.instance.client;
+    final usuario = supabase.auth.currentUser;
+
+    String nomeLogado = '';
+
+    if (usuario != null) {
+      final dadosUsuario = await supabase.from('usuarios').select('nome').eq('id', usuario.id).maybeSingle();
+
+      nomeLogado = dadosUsuario?['nome'] ?? '';
+    }
 
     final agora = DateTime.now();
 
@@ -78,18 +89,37 @@ class _DashboardFuncionarioState extends State<DashboardFuncionario> {
 
     final horarios = await supabase.from('horarios').select();
 
-    final agendamentosHojeResposta = await supabase.from('agendamentos').select('''
+    final agendamentosHojeResposta = await supabase
+        .from('agendamentos')
+        .select('''
           *,
           servicos(*),
           cliente:usuarios!agendamentos_cliente_id_fkey(*),
           barbeiro:usuarios!agendamentos_barbeiro_id_fkey(*)
-        ''').gte('data_hora', inicioHoje.toIso8601String()).lte('data_hora', fimHoje.toIso8601String()).order('data_hora');
+        ''')
+        .gte('data_hora', inicioHoje.toIso8601String())
+        .lte(
+          'data_hora',
+          fimHoje.toIso8601String(),
+        )
+        .order('data_hora');
 
-    final agendamentosMes = await supabase.from('agendamentos').select('''
+    final agendamentosMes = await supabase
+        .from('agendamentos')
+        .select('''
           *,
           servicos(*),
           barbeiro:usuarios!agendamentos_barbeiro_id_fkey(*)
-        ''').eq('status', 'concluido').gte('data_hora', inicioMes.toIso8601String()).lte('data_hora', fimMes.toIso8601String());
+        ''')
+        .eq('status', 'concluido')
+        .gte(
+          'data_hora',
+          inicioMes.toIso8601String(),
+        )
+        .lte(
+          'data_hora',
+          fimMes.toIso8601String(),
+        );
 
     double totalDia = 0;
 
@@ -141,6 +171,8 @@ class _DashboardFuncionarioState extends State<DashboardFuncionario> {
     if (!mounted) return;
 
     setState(() {
+      nomeUsuario = nomeLogado;
+
       totalBarbeiros = barbeiros.length;
       totalServicos = servicos.length;
       totalHorarios = horarios.length;
@@ -175,6 +207,18 @@ class _DashboardFuncionarioState extends State<DashboardFuncionario> {
     return Colors.orange;
   }
 
+  String textoStatus(String status) {
+    if (status == 'concluido') {
+      return 'Concluído';
+    }
+
+    if (status == 'cancelado') {
+      return 'Cancelado';
+    }
+
+    return 'Pendente';
+  }
+
   String saudacao() {
     final hora = DateTime.now().hour;
 
@@ -187,6 +231,14 @@ class _DashboardFuncionarioState extends State<DashboardFuncionario> {
     }
 
     return 'Boa noite';
+  }
+
+  String textoSaudacao() {
+    if (nomeUsuario.trim().isEmpty) {
+      return '${saudacao()}';
+    }
+
+    return '${saudacao()}, $nomeUsuario';
   }
 
   Widget cardResumo({
@@ -280,7 +332,7 @@ class _DashboardFuncionarioState extends State<DashboardFuncionario> {
         subtitle: Text(
           '${servico?['nome'] ?? 'Serviço'} • ${barbeiro?['nome'] ?? 'Barbeiro'}',
         ),
-        trailing: Text(status),
+        trailing: Text(textoStatus(status)),
       ),
     );
   }
@@ -301,7 +353,7 @@ class _DashboardFuncionarioState extends State<DashboardFuncionario> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            '${saudacao()} 👋',
+            textoSaudacao(),
             style: const TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
