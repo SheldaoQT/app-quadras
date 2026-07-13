@@ -250,7 +250,7 @@ class _HomeClienteState extends State<HomeCliente> {
               ),
             ),
             const Text(
-              'Bem-vindo à Barbearia',
+              'Bem-vindo à Barbearia FM',
               style: TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 20),

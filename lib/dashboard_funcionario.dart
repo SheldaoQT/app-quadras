@@ -235,7 +235,7 @@ class _DashboardFuncionarioState extends State<DashboardFuncionario> {
 
   String textoSaudacao() {
     if (nomeUsuario.trim().isEmpty) {
-      return '${saudacao()}';
+      return saudacao();
     }
 
     return '${saudacao()}, $nomeUsuario';
@@ -360,7 +360,7 @@ class _DashboardFuncionarioState extends State<DashboardFuncionario> {
             ),
           ),
           Text(
-            'Resumo da barbearia em $dataHoje',
+            'Resumo da Barbearia FM em $dataHoje',
             style: const TextStyle(
               fontSize: 16,
             ),

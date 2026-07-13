@@ -11,8 +11,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  table_calendar: ^3.1.2  
-
   flutter_localizations:
     sdk: flutter
 
@@ -21,6 +19,7 @@ dependencies:
   supabase_flutter: ^2.15.0
   intl: ^0.20.2
   google_fonts: ^8.1.0
+  table_calendar: ^3.1.2
 
 dev_dependencies:
   flutter_test:

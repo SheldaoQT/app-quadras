@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:app_barba/cadastro_cliente.dart';
 import 'package:app_barba/home_cliente.dart';
 import 'package:app_barba/home_funcionario.dart';
 import 'package:app_barba/recuperar_senha.dart';
+import 'package:app_barba/redefinir_senha.dart';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -23,6 +26,36 @@ class _TelaLoginState extends State<TelaLogin> {
 
   final emailController = TextEditingController();
   final senhaController = TextEditingController();
+
+  StreamSubscription<AuthState>? authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+
+    authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
+      (data) {
+        if (data.event == AuthChangeEvent.passwordRecovery) {
+          if (!mounted) return;
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const RedefinirSenha(),
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    authSubscription?.cancel();
+    emailController.dispose();
+    senhaController.dispose();
+    super.dispose();
+  }
 
   Future<void> autenticar() async {
     if (!formKey.currentState!.validate()) {
@@ -97,12 +130,12 @@ class _TelaLoginState extends State<TelaLogin> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(
-                    Icons.content_cut,
+                    Icons.radio,
                     size: 80,
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Barbearia',
+                    'Barbearia FM',
                     style: TextStyle(
                       fontSize: 30,
                       fontWeight: FontWeight.bold,

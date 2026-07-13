@@ -1,4 +1,5 @@
 import 'package:app_barba/dashboard_funcionario.dart';
+import 'package:app_barba/login.dart';
 import 'package:app_barba/tela_agendamentos.dart';
 import 'package:app_barba/tela_barbeiros.dart';
 import 'package:app_barba/tela_comissao.dart';
@@ -8,10 +9,17 @@ import 'package:app_barba/tela_servico.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class HomeFuncionario extends StatelessWidget {
+class HomeFuncionario extends StatefulWidget {
   const HomeFuncionario({
     super.key,
   });
+
+  @override
+  State<HomeFuncionario> createState() => _HomeFuncionarioState();
+}
+
+class _HomeFuncionarioState extends State<HomeFuncionario> {
+  Key dashboardKey = UniqueKey();
 
   Future<void> sair(BuildContext context) async {
     await Supabase.instance.client.auth.signOut();
@@ -20,10 +28,19 @@ class HomeFuncionario extends StatelessWidget {
       return;
     }
 
-    Navigator.popUntil(
+    Navigator.pushAndRemoveUntil(
       context,
-      (route) => route.isFirst,
+      MaterialPageRoute(
+        builder: (_) => const TelaLogin(),
+      ),
+      (route) => false,
     );
+  }
+
+  void atualizarPagina() {
+    setState(() {
+      dashboardKey = UniqueKey();
+    });
   }
 
   Widget cabecalhoMenu() {
@@ -41,14 +58,14 @@ class HomeFuncionario extends StatelessWidget {
             radius: 30,
             backgroundColor: Colors.white,
             child: Icon(
-              Icons.content_cut,
+              Icons.radio,
               size: 34,
               color: Colors.brown.shade600,
             ),
           ),
           const SizedBox(height: 12),
           const Text(
-            'Barbearia',
+            'Barbearia FM',
             style: TextStyle(
               color: Colors.white,
               fontSize: 24,
@@ -94,10 +111,15 @@ class HomeFuncionario extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Painel Administrativo',
-        ),
+        title: const Text('Painel Administrativo'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'Atualizar',
+            icon: const Icon(Icons.refresh),
+            onPressed: atualizarPagina,
+          ),
+        ],
       ),
       drawer: Drawer(
         child: Column(
@@ -161,7 +183,9 @@ class HomeFuncionario extends StatelessWidget {
           ],
         ),
       ),
-      body: const DashboardFuncionario(),
+      body: DashboardFuncionario(
+        key: dashboardKey,
+      ),
     );
   }
 }
