@@ -1,3 +1,4 @@
+import 'package:app_barba/home_cliente.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -14,20 +15,25 @@ class _CadastroClienteState extends State<CadastroCliente> {
   final formKey = GlobalKey<FormState>();
 
   final nomeController = TextEditingController();
-
   final emailController = TextEditingController();
-
   final senhaController = TextEditingController();
 
-  String? validarSenha(
-    String? value,
-  ) {
+  @override
+  void dispose() {
+    nomeController.dispose();
+    emailController.dispose();
+    senhaController.dispose();
+
+    super.dispose();
+  }
+
+  String? validarSenha(String? value) {
     if (value == null || value.isEmpty) {
       return 'Campo obrigatório';
     }
 
     if (value.length < 6) {
-      return 'Mínimo 6 caracteres';
+      return 'Mínimo de 6 caracteres';
     }
 
     return null;
@@ -47,21 +53,25 @@ class _CadastroClienteState extends State<CadastroCliente> {
       );
     }
 
-    await supabase
-        .from(
-      'usuarios',
-    )
-        .insert({
+    /*
+     * Quando a confirmação de e-mail está desativada,
+     * o cadastro já retorna uma sessão autenticada.
+     */
+    if (auth.session == null) {
+      throw const AuthException(
+        'Confirme seu e-mail antes de entrar.',
+      );
+    }
+
+    await supabase.from('usuarios').insert({
       'id': auth.user!.id,
-      'nome': nomeController.text,
+      'nome': nomeController.text.trim(),
       'perfil': 'cliente',
     });
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -74,9 +84,7 @@ class _CadastroClienteState extends State<CadastroCliente> {
             maxWidth: 700,
           ),
           child: Padding(
-            padding: const EdgeInsets.all(
-              16,
-            ),
+            padding: const EdgeInsets.all(16),
             child: Form(
               key: formKey,
               child: Column(
@@ -89,7 +97,7 @@ class _CadastroClienteState extends State<CadastroCliente> {
                       labelText: 'Nome',
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (value == null || value.trim().isEmpty) {
                         return 'Campo obrigatório!';
                       }
 
@@ -98,13 +106,20 @@ class _CadastroClienteState extends State<CadastroCliente> {
                   ),
                   TextFormField(
                     controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       labelText: 'E-mail',
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      final email = value?.trim() ?? '';
+
+                      if (email.isEmpty) {
                         return 'Campo obrigatório!';
+                      }
+
+                      if (!email.contains('@')) {
+                        return 'E-mail inválido';
                       }
 
                       return null;
@@ -119,11 +134,9 @@ class _CadastroClienteState extends State<CadastroCliente> {
                       labelText: 'Senha',
                       suffixIcon: IconButton(
                         onPressed: () {
-                          setState(
-                            () {
-                              obscureText = !obscureText;
-                            },
-                          );
+                          setState(() {
+                            obscureText = !obscureText;
+                          });
                         },
                         icon: Icon(
                           obscureText ? Icons.visibility : Icons.visibility_off,
@@ -140,10 +153,8 @@ class _CadastroClienteState extends State<CadastroCliente> {
                       try {
                         await cadastrar();
 
-                        if (!context.mounted) {
-                          return;
-                        }
                         if (!mounted) return;
+
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
@@ -153,31 +164,44 @@ class _CadastroClienteState extends State<CadastroCliente> {
                           ),
                         );
 
-                        Navigator.pop(
+                        /*
+                         * Abre a HomeCliente e remove as telas
+                         * de cadastro e login do histórico.
+                         */
+                        Navigator.pushAndRemoveUntil(
                           context,
+                          MaterialPageRoute(
+                            builder: (_) => const HomeCliente(),
+                          ),
+                          (route) => false,
+                        );
+                      } on AuthException catch (e) {
+                        if (!mounted) return;
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(e.message),
+                            backgroundColor: Colors.red,
+                          ),
                         );
                       } on PostgrestException catch (e) {
-                        if (!context.mounted) {
-                          return;
-                        }
                         if (!mounted) return;
+
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              e.code == '23505' ? 'Login já cadastrado' : 'Erro ao cadastrar',
+                              e.code == '23505' ? 'Login já cadastrado' : 'Erro ao cadastrar cliente',
                             ),
                             backgroundColor: Colors.red,
                           ),
                         );
-                      } catch (_) {
-                        if (!context.mounted) {
-                          return;
-                        }
+                      } catch (e) {
                         if (!mounted) return;
+
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
+                          SnackBar(
                             content: Text(
-                              'Falha ao realizar cadastro',
+                              'Falha ao realizar cadastro: $e',
                             ),
                             backgroundColor: Colors.red,
                           ),
